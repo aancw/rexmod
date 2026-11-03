@@ -201,6 +201,7 @@ func agentPaneIn(agent, dir string) string {
 		return ""
 	}
 	root, _ := repoRoot(dir)
+	common := commonGitDir(dir)
 	type cand struct{ session, block string }
 	var cands []cand
 	for _, s := range list.Sessions {
@@ -216,7 +217,9 @@ func agentPaneIn(agent, dir string) string {
 			}
 		}
 	}
-	hits := make([]bool, len(cands))
+	// 3: in dir; 2: in the same worktree; 1: in another worktree of the
+	// same repository (the agent may have moved into one); 0: no.
+	score := make([]int, len(cands))
 	var wg sync.WaitGroup
 	for i, c := range cands {
 		wg.Add(1)
@@ -226,37 +229,62 @@ func agentPaneIn(agent, dir string) string {
 			if err != nil || p.Foreground == nil || agentOf(p.Foreground) != agent {
 				return
 			}
-			if p.Foreground.Cwd == dir {
-				hits[i] = true
-			} else if r, err := repoRoot(p.Foreground.Cwd); err == nil && root != "" && r == root {
-				hits[i] = true
+			cwd := p.Foreground.Cwd
+			if r := recordedPaneCwd(c.block, p.Foreground.Pid); r != "" {
+				cwd = r
+			}
+			switch {
+			case cwd == dir:
+				score[i] = 3
+			case root != "" && func() bool { r, err := repoRoot(cwd); return err == nil && r == root }():
+				score[i] = 2
+			case common != "" && commonGitDir(cwd) == common:
+				score[i] = 1
 			}
 		}(i, c)
 	}
 	wg.Wait()
-	found := ""
-	for i, hit := range hits {
-		if !hit {
-			continue
+	for best := 3; best > 0; best-- {
+		found := ""
+		for i, sc := range score {
+			if sc != best {
+				continue
+			}
+			if found != "" {
+				return "" // two of them: can't tell which
+			}
+			found = cands[i].block
 		}
 		if found != "" {
-			return "" // two of them: can't tell which
+			return found
 		}
-		found = cands[i].block
 	}
-	return found
+	return ""
 }
 
-// paneCwd returns the working directory of the foreground process in a Rex
-// pane, wherever it is, or "".
-func paneCwd(block string) string {
+// commonGitDir names the repository dir belongs to, the same for all of
+// its worktrees, or "".
+func commonGitDir(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	out, err := git(dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
+}
+
+// paneForeground returns the foreground process of a Rex pane, wherever it
+// is, or nil.
+func paneForeground(block string) *procInfo {
 	var list struct {
 		Sessions []struct {
 			SessionID string `json:"session_id"`
 		} `json:"sessions"`
 	}
-	if rexJSON(&list, "ls", "--json") != nil {
-		return ""
+	if block == "" || rexJSON(&list, "ls", "--json") != nil {
+		return nil
 	}
 	for _, s := range list.Sessions {
 		v, err := sessionView(s.SessionID)
@@ -265,15 +293,23 @@ func paneCwd(block string) string {
 		}
 		for _, w := range v.Windows {
 			for _, b := range w.blocks() {
-				if !sameBlock(b.BlockID, block) {
-					continue
+				if sameBlock(b.BlockID, block) {
+					if p, err := blockProc(s.SessionID, b.BlockID); err == nil {
+						return p.Foreground
+					}
+					return nil
 				}
-				if p, err := blockProc(s.SessionID, b.BlockID); err == nil && p.Foreground != nil {
-					return p.Foreground.Cwd
-				}
-				return ""
 			}
 		}
+	}
+	return nil
+}
+
+// paneCwd returns the working directory of the foreground process in a Rex
+// pane, wherever it is, or "".
+func paneCwd(block string) string {
+	if p := paneForeground(block); p != nil {
+		return p.Cwd
 	}
 	return ""
 }
@@ -359,7 +395,11 @@ func resolveTarget(session, window string) (*Target, error) {
 			}
 		}
 		if a := agentOf(fg); a != "" {
-			t.Agents = append(t.Agents, AgentPane{BlockID: b.BlockID, Agent: a, Name: a, cwd: fg.Cwd})
+			cwd := fg.Cwd
+			if r := recordedPaneCwd(b.BlockID, fg.Pid); r != "" {
+				cwd = r // e.g. a Claude Code worktree
+			}
+			t.Agents = append(t.Agents, AgentPane{BlockID: b.BlockID, Agent: a, Name: a, cwd: cwd})
 		}
 	}
 	// Follow the focused agent pane; with the focus elsewhere, the agent

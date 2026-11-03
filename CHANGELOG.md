@@ -2,6 +2,13 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.13] - 2026-11-03
+
+### Fixed
+
+- The panel follows an agent into a worktree. Claude Code's worktrees (`.claude/worktrees/<name>`) move only the session, not the agent's process, so the panel kept showing the main checkout and its branch. Each agent's hooks now record where it really works, for its pane: Claude Code, Codex, OpenCode and Pi. The record holds while the same agent runs in the pane.
+- Codex and OpenCode notes reach the right pane when the agent works in another worktree of the repository than the one its pane was opened in.
+
 ## [0.1.12] - 2026-11-03
 
 ### Changed

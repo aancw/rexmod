@@ -625,6 +625,12 @@ func cmdHook(args []string) error {
 	}
 	if in.Cwd == "" {
 		in.Cwd, _ = os.Getwd()
+	} else if agent == "" {
+		// Claude Code and Pi run the hook from the agent's own process.
+		recordPaneCwd(os.Getenv("REX_BLOCK"), in.Cwd, hookAncestors())
+	} else if p := paneForeground(os.Getenv("REX_BLOCK")); p != nil && agentOf(p) != "" {
+		// Codex and OpenCode run it from a shared server: name the pane's agent.
+		recordPaneCwd(os.Getenv("REX_BLOCK"), in.Cwd, []int{p.Pid})
 	}
 	repo, err := repoRoot(in.Cwd)
 	if err != nil {
