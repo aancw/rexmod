@@ -625,7 +625,9 @@ func cmdHook(args []string) error {
 	}
 	if in.Cwd == "" {
 		in.Cwd, _ = os.Getwd()
-	} else if agent == "" {
+	}
+	in.Cwd = worktreeInUse(in.Cwd, in.TranscriptPath)
+	if agent == "" {
 		// Claude Code and Pi run the hook from the agent's own process.
 		recordPaneCwd(os.Getenv("REX_BLOCK"), in.Cwd, hookAncestors())
 	} else if p := paneForeground(os.Getenv("REX_BLOCK")); p != nil && agentOf(p) != "" {

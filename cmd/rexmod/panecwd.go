@@ -76,3 +76,61 @@ var parentPid = func(pid int) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(string(out)))
 	return n
 }
+
+// worktreeInUse returns the worktree of cwd's repository that the agent's
+// transcript names last, or cwd. Agents often stay where they started and
+// work in a worktree through paths and `cd` (Claude Code without
+// EnterWorktree, Codex), so their own cwd doesn't tell.
+func worktreeInUse(cwd, transcript string) string {
+	if transcript == "" {
+		return cwd
+	}
+	root, err := repoRoot(cwd)
+	if err != nil {
+		return cwd
+	}
+	out, err := git(root, "worktree", "list", "--porcelain")
+	if err != nil {
+		return cwd
+	}
+	var trees []string
+	for _, l := range strings.Split(out, "\n") {
+		if p, ok := strings.CutPrefix(l, "worktree "); ok && p != root {
+			trees = append(trees, p)
+		}
+	}
+	if len(trees) == 0 {
+		return cwd
+	}
+	tail := readTail(transcript, 4<<20)
+	best, at := cwd, -1
+	for _, t := range trees {
+		// The path followed by a separator or a quote, so a worktree named
+		// like the prefix of another isn't taken for it.
+		for _, end := range []string{"/", `"`, " ", "'", "\n"} {
+			if i := strings.LastIndex(tail, t+end); i > at {
+				best, at = t, i
+			}
+		}
+	}
+	return best
+}
+
+func readTail(path string, n int64) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil {
+		return ""
+	}
+	off := st.Size() - n
+	if off < 0 {
+		off = 0
+	}
+	b := make([]byte, st.Size()-off)
+	n2, _ := f.ReadAt(b, off)
+	return string(b[:n2])
+}
