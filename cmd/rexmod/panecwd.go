@@ -95,11 +95,11 @@ func worktreeInUse(cwd, transcript string) string {
 	}
 	var trees []string
 	for _, l := range strings.Split(out, "\n") {
-		if p, ok := strings.CutPrefix(l, "worktree "); ok && p != root {
+		if p, ok := strings.CutPrefix(l, "worktree "); ok {
 			trees = append(trees, p)
 		}
 	}
-	if len(trees) == 0 {
+	if len(trees) < 2 {
 		return cwd
 	}
 	// Only what the agent itself did: its commands, edits and words. Tool
@@ -112,7 +112,9 @@ func worktreeInUse(cwd, transcript string) string {
 		}
 		best, at := "", -1
 		for _, t := range trees {
-			if j := lastPathIndex(l, t); j > at {
+			// The main checkout's path starts every path under it, worktrees
+			// in .claude/worktrees too: at the same spot the longer one wins.
+			if j := lastPathIndex(l, t); j > at || j == at && j >= 0 && len(t) > len(best) {
 				best, at = t, j
 			}
 		}

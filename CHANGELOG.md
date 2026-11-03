@@ -2,6 +2,12 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.16] - 2026-11-03
+
+### Fixed
+
+- An agent that moved into a worktree (Claude Code's EnterWorktree) no longer falls back to the main checkout after its next turn: the main checkout's path starts every path under `.claude/worktrees`, and was taken for it.
+
 ## [0.1.15] - 2026-11-03
 
 ### Fixed

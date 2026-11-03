@@ -53,6 +53,15 @@ func TestWorktreeInUse(t *testing.T) {
 	if got := worktreeInUse(root, tr); got != root+"/wt/a" {
 		t.Fatalf("backtick: got %q", got)
 	}
+	// Started inside a worktree: the main checkout is a candidate too.
+	write(`{"file_path":"` + root + `/wt/ab/y.go"}`)
+	if got := worktreeInUse(root+"/wt/ab", tr); got != root+"/wt/ab" {
+		t.Fatalf("from a worktree: got %q", got)
+	}
+	write(`{"file_path":"` + root + `/README.md"}`)
+	if got := worktreeInUse(root+"/wt/ab", tr); got != root {
+		t.Fatalf("back in main: got %q", got)
+	}
 	write(`nothing`)
 	if got := worktreeInUse(root, tr); got != root {
 		t.Fatalf("got %q", got)
