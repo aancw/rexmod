@@ -2,6 +2,12 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.17] - 2026-11-03
+
+### Fixed
+
+- The Files tab and the `⌘P` picker list ignored files that sit on their own, such as `.env.development.local`. Wholly ignored directories, such as `node_modules` and build output, stay out.
+
 ## [0.1.16] - 2026-11-03
 
 ### Fixed
