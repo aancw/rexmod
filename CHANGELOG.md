@@ -2,7 +2,7 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.12] - 2026-11-03
 
 ### Changed
 
@@ -14,6 +14,7 @@ All notable changes to rexmod. The format follows [Keep a Changelog](https://kee
 
 ### Added
 
+- The editor pane runs one headless Neovim behind Rex panes, each Neovim window in its own Rex pane (`rexmod editor`). Ported from neorex (MIT). The bundled Neovim config draws images, statuslines and floats correctly in it.
 - The panel follows Rex's Interface settings: selected tabs, pills and buttons are drawn the way Rex draws its selected tab in Classic and in Glass, tinted with the theme or not, light or dark, and flat in an inactive window. A change in Rex's Settings shows at once.
 - An *Info* tab: the working directory with Copy Path and Reveal in Finder; the followed agent's state as it reports it to Rex (working, waiting for you, idle), with Copy Session ID and Copy Resume Command for Claude Code; your Claude plan's session (5h) and weekly (7d) usage with their reset times, read from what Claude Code caches; the jobs running in the agent's pane; the ports the tab's panes listen on (click one to open it); the other agents of the tab (click one to follow it); and the pending comments.
 - `rexmod info` prints the same as JSON.
