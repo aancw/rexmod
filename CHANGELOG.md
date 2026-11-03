@@ -2,6 +2,12 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.14] - 2026-11-03
+
+### Fixed
+
+- The panel also follows an agent that works in a worktree without moving into it, through paths and `cd` in its commands: the hook takes the worktree the agent's own commands, edits and words name last. Tool output, such as `git worktree list`, doesn't count.
+
 ## [0.1.13] - 2026-11-03
 
 ### Fixed
