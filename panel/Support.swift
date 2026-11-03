@@ -226,3 +226,64 @@ enum UpdateHook {
         a.runModal()
     }
 }
+
+/// Moves the panel's edge the way Rex moves its sidebar's. Measured from Rex
+/// 1742 at 60 fps, opening and closing alike: a spring with a 0.35 s response
+/// and 0.83 damping, half way in about 85 ms, 99% in about 230 ms, then a 1%
+/// overshoot that settles by 0.45 s. AppKit animations only take Bézier
+/// curves, so this sets the value on every display frame.
+final class EdgeSpring: NSObject {
+    static let response = 0.35
+    static let damping = 0.83
+    /// Long past settling: the envelope is below 0.02% by then.
+    static let duration = 0.6
+
+    /// How far along the spring is, t seconds in: 0 at rest, 1 at its target.
+    static func progress(_ t: Double) -> Double {
+        guard t > 0 else { return 0 }
+        let w0 = 2 * Double.pi / response
+        let wd = w0 * (1 - damping * damping).squareRoot()
+        return 1 - exp(-damping * w0 * t) * (cos(wd * t) + damping * w0 / wd * sin(wd * t))
+    }
+
+    private(set) var target: CGFloat = 0
+    private var from: CGFloat = 0
+    private var start: CFTimeInterval = 0
+    private var link: CADisplayLink?
+    private var step: ((CGFloat) -> Void)?
+    private var done: (() -> Void)?
+    var isRunning: Bool { link != nil }
+
+    /// Starts from `from`, usually where a running spring has got to, so a
+    /// second toggle mid-way turns around instead of jumping.
+    func run(on view: NSView, from: CGFloat, to: CGFloat, step: @escaping (CGFloat) -> Void, done: @escaping () -> Void) {
+        stop()
+        self.from = from
+        target = to
+        start = CACurrentMediaTime()
+        self.step = step
+        self.done = done
+        let l = view.displayLink(target: self, selector: #selector(tick(_:)))
+        l.add(to: .main, forMode: .common)
+        link = l
+    }
+
+    @objc private func tick(_ l: CADisplayLink) {
+        let t = l.targetTimestamp - start
+        if t >= Self.duration {
+            step?(target)
+            let d = done
+            stop()
+            d?()
+            return
+        }
+        step?(from + (target - from) * CGFloat(Self.progress(t)))
+    }
+
+    func stop() {
+        link?.invalidate()
+        link = nil
+        step = nil
+        done = nil
+    }
+}

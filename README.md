@@ -30,8 +30,10 @@ the whole loop stays in one Rex window, for Claude Code, Codex, OpenCode or Pi.
 
 1. **Prompt.** Talk to your agent as usual. rexmod snapshots the working tree the moment you send.
 2. **Change.** The *Changes panel* on the right, styled like Rex's own sidebar, fills in while the
-   agent works: *Last Turn* is exactly what this reply changed, next to *Uncommitted*, *Branch* and a
-   *Files* tree.
+   agent works. Its *Changes* tab shows *Last Turn*, exactly what this reply changed, next to
+   *Uncommitted* (split into staged and unstaged) and *Branch*, as a list or a tree. The other tabs
+   are *Info* (the agent's state and session, your plan usage, what runs in its pane and the ports it
+   listens on) and a *Files* tree. The panel follows Rex's Interface style, Classic or Glass.
 3. **Review.** Click a file and it opens in Neovim beside the agent, at the changed line, with LSP,
    completion and live diagnostics. `Space r` on a line or a selection leaves a review comment.
 4. **Feedback.** Your comments ride along with your next message to the agent, or go right away
@@ -116,12 +118,13 @@ are there.
 | Editor | `]r` / `[r` | Next / previous comment |
 | Editor | `Space R` | All comments of the repo: `Ctrl+S` sends pending ones, `Ctrl+X` deletes |
 
-The comment badge in the panel header sends pending comments right away. Without it they ride along
-with the next message you type to the agent, as a short list of `file:line`, the code, and your note.
+Pending comments head the panel's *Changes* tab, whose icon shows how many there are: click one to
+open it in the editor, or send them all right away with *Send*. Otherwise they ride along with the
+next message you type to the agent, as a short list of `file:line`, the code, and your note.
 
 **Several agents in one tab.** The panel, Last Turn and your comments follow the agent pane you
 focused last; working in the editor or a shell doesn't change that. The agent name at the bottom of
-the panel becomes a menu to switch.
+the panel becomes a menu to switch, and the *Info* tab lists them all.
 
 ## How it works
 
@@ -198,8 +201,8 @@ terminal or app) in the same repository only gets notes written outside Rex.
 Codex runs its hooks in one background server for every pane, so rexmod finds the pane by looking
 for the Codex that works in that folder. With two of them in the same repository it can't tell
 which one sent the message, and rather than guess it leaves the notes pending and records the turn
-without a pane. Send those notes with the comment badge in the panel: it pastes them straight into
-the pane the panel follows. Claude Code, OpenCode and Pi don't have this limit.
+without a pane. Send those notes from the panel's *Changes* tab: it pastes them straight into the
+pane the panel follows. Claude Code, OpenCode and Pi don't have this limit.
 </details>
 
 <details>

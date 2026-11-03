@@ -111,6 +111,7 @@ type procInfo struct {
 }
 
 type blockProcess struct {
+	Child      *procInfo  `json:"child"` // the pane's login process; its child is the shell
 	Foreground *procInfo  `json:"foreground"`
 	Ancestors  []procInfo `json:"ancestors"`
 }

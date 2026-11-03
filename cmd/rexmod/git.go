@@ -157,6 +157,7 @@ type FileChange struct {
 	Add     int    `json:"add"`
 	Del     int    `json:"del"`
 	Binary  bool   `json:"binary,omitempty"`
+	Staged  bool   `json:"staged,omitempty"` // uncommitted mode: all of it is in the index
 }
 
 type Changes struct {
@@ -287,11 +288,39 @@ func computeChanges(repo, mode, now, block string) (*Changes, error) {
 		return nil, err
 	}
 	c.Files = files
+	if c.Mode == "uncommitted" {
+		markStaged(repo, c.Files)
+	}
 	for _, f := range files {
 		c.Add += f.Add
 		c.Del += f.Del
 	}
 	return c, nil
+}
+
+// markStaged flags the files whose whole change is in the index. A file with
+// more edits on top of what's staged stays unflagged: a file is listed once,
+// and its numbers cover the edits that aren't staged yet.
+func markStaged(repo string, files []FileChange) {
+	staged, err := git(repo, "diff", "--no-ext-diff", "--cached", "-M", "-z", "--name-only")
+	if err != nil {
+		return
+	}
+	dirty, err := git(repo, "diff", "--no-ext-diff", "-z", "--name-only")
+	if err != nil {
+		return
+	}
+	notStaged := map[string]bool{}
+	for _, p := range strings.Split(dirty, "\x00") {
+		notStaged[p] = true
+	}
+	inIndex := map[string]bool{}
+	for _, p := range strings.Split(staged, "\x00") {
+		inIndex[p] = true
+	}
+	for i := range files {
+		files[i].Staged = inIndex[files[i].Path] && !notStaged[files[i].Path]
+	}
 }
 
 // listFiles returns tracked and untracked (not ignored) files, relative to repo.

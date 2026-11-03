@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 
 /// The colors Rex draws its chrome with, for one theme.
 struct RexThemeColors {
@@ -54,9 +55,43 @@ enum RexTheme {
     }()
 
     static func colors(for view: NSView) -> RexThemeColors {
-        let dark = view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+        colors(dark: view.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua)
+    }
+
+    static func colors(dark: Bool) -> RexThemeColors {
         let id = RM.defaults.string(forKey: dark ? "Workspace.darkThemeID" : "Workspace.lightThemeID")
             ?? (dark ? "merino-dark" : "merino-light")
         return themes[id] ?? .fallback(dark: dark)
+    }
+}
+
+/// Rex's Interface settings that change how its surfaces are drawn: Classic
+/// or Glass, each tinted with the theme or not. Rex stores the pair as one
+/// value: useTheme (Classic, tinted), system (Classic), blendTheme (Glass,
+/// tinted), modern (Glass). Rex writes it in this process, so a change in its
+/// Settings shows up at once.
+final class RexLook: ObservableObject {
+    static let shared = RexLook()
+    @Published private(set) var glass = false
+    @Published private(set) var tinted = true
+    /// Changes with the selected themes, so views using theme colors redraw.
+    @Published private(set) var themes = ""
+
+    private init() {
+        read()
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.read()
+        }
+    }
+
+    private func read() {
+        let style = RM.defaults.string(forKey: "Workspace.interfaceStyle") ?? "useTheme"
+        let g: Bool
+        if #available(macOS 26.0, *) { g = ["blendTheme", "modern", "glass"].contains(style) } else { g = false }
+        let t = !["system", "modern"].contains(style)
+        let th = (RM.defaults.string(forKey: "Workspace.lightThemeID") ?? "") + "|" + (RM.defaults.string(forKey: "Workspace.darkThemeID") ?? "")
+        if g != glass { glass = g }
+        if t != tinted { tinted = t }
+        if th != themes { themes = th }
     }
 }

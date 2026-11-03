@@ -19,6 +19,7 @@ const usage = `rexmod: Rex Changes panel, editor and review helpers
 
   rexmod target   [--session S] [--window W]           agent pane + repo of a window (JSON)
   rexmod state    [--session S] [--window W]           target + all change sets (JSON, for the panel)
+  rexmod info     [--session S] [--window W]           agent status, session, plan usage, processes, ports (JSON)
   rexmod changes  [--repo R] [--mode M]                M = last-turn | uncommitted | branch (JSON)
   rexmod files    [--repo R] [--changed]               files of the repo, one per line
   rexmod open     [--session S] [--window W] FILE[:LINE]  open in the editor pane
@@ -49,6 +50,8 @@ func main() {
 		err = cmdState(os.Args[2:])
 	case "changes":
 		err = cmdChanges(os.Args[2:])
+	case "info":
+		err = cmdInfo(os.Args[2:])
 	case "files":
 		err = cmdFiles(os.Args[2:])
 	case "open":

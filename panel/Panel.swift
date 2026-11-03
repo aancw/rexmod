@@ -60,22 +60,15 @@ enum ChromeInset {
         return true
     }
 
-    static func apply(host: NSView, inset newInset: CGFloat, animated: Bool) {
+    /// Gives the panel this much room now. An animation calls it on every
+    /// frame, so the override above clamps Rex's own layout passes to the
+    /// width the animation has reached, not to where it ends.
+    static func set(host: NSView, inset newInset: CGFloat) {
         guard let sup = host.superview else { return }
-        let changed = abs(inset - newInset) > 0.5
         inset = newInset
         let target = NSSize(width: max(sup.bounds.width - newInset, 300), height: host.frame.height)
-        guard changed || abs(host.frame.width - target.width) > 0.5 else { return }
-        if animated {
-            NSAnimationContext.runAnimationGroup { ctx in
-                ctx.duration = 0.2
-                ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
-                ctx.allowsImplicitAnimation = true
-                host.animator().setFrameSize(target)
-            }
-        } else {
-            host.setFrameSize(target)
-        }
+        guard abs(host.frame.width - target.width) > 0.25 else { return }
+        host.setFrameSize(target)
     }
 
     /// Room the hidden panel's toggle takes at the right end of the title row.
@@ -256,6 +249,19 @@ final class RexModContainer: NSView {
     let toggleControl: ToggleButton
     private let divider: DividerView
     private weak var chromeHost: NSView?
+    private let edge = EdgeSpring()
+    /// The room Rex's content gives the panel right now; mid-animation, less
+    /// or more than the panel's width.
+    private var shownInset: CGFloat = 0
+    /// Shows the part of the panel Rex's content has uncovered. The panel
+    /// sits above Rex's views (Rex's backdrop spans the whole window, so it
+    /// can't go below them), and without this it would draw over Rex's
+    /// content mid-animation. With it, the panel is revealed and covered by
+    /// the moving edge, as Rex's sidebar is by its content card. The clip and
+    /// the panel keep their frames while the edge moves; only the clip's mask
+    /// layer does, so the panel isn't laid out again on every frame.
+    private let panelClip = NSView()
+    private let reveal = CALayer()
 
     var panelWidth: CGFloat {
         didSet {
@@ -283,7 +289,14 @@ final class RexModContainer: NSView {
         content.autoresizingMask = []
         addSubview(backdrop)
         addSubview(content)
-        addSubview(panel)
+        panelClip.wantsLayer = true
+        panelClip.layer?.masksToBounds = true
+        reveal.backgroundColor = NSColor.black.cgColor
+        panelClip.layer?.mask = reveal
+        panelClip.autoresizesSubviews = false
+        panel.autoresizingMask = []
+        panelClip.addSubview(panel)
+        addSubview(panelClip)
         addSubview(self.toggle)
         divider.container = self
         addSubview(divider)
@@ -292,6 +305,7 @@ final class RexModContainer: NSView {
     }
 
     var insetMode: Bool { chromeHost?.window != nil }
+    var isAnimating: Bool { edge.isRunning }
 
     /// Finds Rex's chrome constraint (the chrome appears a moment after the
     /// window). Without it, Rex is narrowed whole and a copy of its backdrop
@@ -329,26 +343,20 @@ final class RexModContainer: NSView {
         min(max(panelWidth, 220), max(bounds.width * 0.6, 220))
     }
 
-    func layoutPanels(animated: Bool) {
+    func layoutPanels(animated requested: Bool) {
+        let animated = requested && !Motion.reduced
         let w = bounds.width, h = bounds.height
         let pw = panelVisible ? clampedWidth() : 0
-        panel.frame = NSRect(x: w - clampedWidth(), y: 0, width: clampedWidth(), height: h)
-        panel.isHidden = !panelVisible
-        if insetMode, let host = chromeHost {
-            content.frame = bounds
-            ChromeInset.apply(host: host, inset: pw, animated: animated)
-        } else {
-            let contentFrame = NSRect(x: 0, y: 0, width: max(w - pw, 100), height: h)
-            if animated {
-                NSAnimationContext.runAnimationGroup { ctx in
-                    ctx.duration = 0.2
-                    ctx.allowsImplicitAnimation = true
-                    self.content.animator().frame = contentFrame
-                }
-            } else {
-                content.frame = contentFrame
-            }
-            backdrop.frame = bounds
+        // Like Rex's sidebar, the panel stays put: Rex's content slides off
+        // it and back over it (applyInset clips it to the uncovered part).
+        if insetMode { content.frame = bounds } else { backdrop.frame = bounds }
+        if animated && abs(shownInset - pw) > 0.5 {
+            edge.run(on: self, from: shownInset, to: pw, step: { [weak self] v in self?.applyInset(v) },
+                     done: { [weak self] in self?.positionToggle() })
+        } else if !edge.isRunning || abs(edge.target - pw) > 0.5 {
+            // A resize or a drag mid-animation: go straight to the new width.
+            edge.stop()
+            applyInset(pw)
         }
         divider.frame = NSRect(x: w - pw - 3, y: 0, width: 6, height: h)
         divider.isHidden = !panelVisible
@@ -359,7 +367,8 @@ final class RexModContainer: NSView {
             positionToggle()
             if animated {
                 toggle.alphaValue = 0
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+                // Once the spring has all but arrived (99% at ~230 ms).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
                     guard let self = self, !self.panelVisible else { return }
                     self.positionToggle()
                     NSAnimationContext.runAnimationGroup { ctx in
@@ -370,6 +379,30 @@ final class RexModContainer: NSView {
             } else {
                 toggle.alphaValue = 1
             }
+        }
+    }
+
+    /// Narrows Rex's content to leave `inset` points on the right.
+    private func applyInset(_ inset: CGFloat) {
+        shownInset = inset
+        let w = bounds.width, h = bounds.height, cw = clampedWidth()
+        let clip = NSRect(x: w - cw, y: 0, width: cw, height: h)
+        if panelClip.frame != clip { panelClip.frame = clip }
+        let full = NSRect(x: 0, y: 0, width: cw, height: h)
+        if panel.frame != full { panel.frame = full }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        reveal.frame = CGRect(x: cw - min(max(inset, 0), cw), y: 0, width: min(max(inset, 0), cw), height: h)
+        CATransaction.commit()
+        panelClip.isHidden = inset < 0.5
+        // The spring overshoots by ~1%. Rex's edge does too, but a terminal
+        // pushed past its final width rewraps (and its program redraws) twice
+        // more once the edge settles, so the terminal stops at the target.
+        let terminalInset = min(max(inset, 0), cw)
+        if insetMode, let host = chromeHost {
+            ChromeInset.set(host: host, inset: terminalInset)
+        } else {
+            content.frame = NSRect(x: 0, y: 0, width: max(bounds.width - terminalInset, 100), height: bounds.height)
         }
     }
 
@@ -529,8 +562,11 @@ final class PanelHost: NSObject {
             let pending = (st?.pendingComments ?? 0) > 0
             self?.containers.values.forEach { $0.toggleControl.showsDot = pending }
         }
+        // Rex resizes the title rows on every frame of the edge animation;
+        // placing the toggle walks the whole view tree, so it waits for the
+        // edge to settle (the toggle is hidden until then anyway).
         ChromeInset.onTitleFrameChange = { [weak self] in
-            self?.containers.values.forEach { $0.positionToggle() }
+            self?.containers.values.forEach { if !$0.isAnimating { $0.positionToggle() } }
         }
 
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
@@ -545,6 +581,9 @@ final class PanelHost: NSObject {
             self?.containers.values.contains { $0.window?.isVisible == true } ?? false
         }
         Shell.rexmod(["warm"]) { _, _, _ in } // cache the login env so the first editor opens fast
+        // Reading the icon theme takes a moment; done on first use, it
+        // stalls the first tree (and the tab animation showing it).
+        DispatchQueue.global(qos: .utility).async { _ = FlowIcons.shared }
         model.start()
         registerNotify("dev.rexmod.toggle") { [weak self] in self?.toggle(window: NSApp.keyWindow) }
         registerNotify("dev.rexmod.refresh") { [weak self] in self?.model.refresh(reason: "notify") }
@@ -568,8 +607,9 @@ final class PanelHost: NSObject {
             guard let m = self?.model, let row = m.changeRows().first(where: { !$0.node.isDir }) else { return }
             m.open(row.node.id)
         }
-        registerNotify("dev.rexmod.tab.files") { [weak self] in self?.model.tab = .files }
-        registerNotify("dev.rexmod.tab.changes") { [weak self] in self?.model.tab = .changes }
+        for t in panelTabs {
+            registerNotify("dev.rexmod.tab.\(t.tab.rawValue)") { [weak self] in self?.model.tab = t.tab }
+        }
         for (i, m) in changeModes.enumerated() {
             registerNotify("dev.rexmod.mode.\(i)") { [weak self] in self?.model.mode = m.id }
         }
@@ -646,7 +686,11 @@ final class PanelHost: NSObject {
         guard c != nil else { return }
         model.panelVisible.toggle()
         for c in containers.values { c.panelVisible = model.panelVisible }
-        if model.panelVisible { model.refresh(reason: "shown") }
+        // Fresh state can redraw the panel; let the edge settle first (99%
+        // of the way at ~230 ms).
+        if model.panelVisible {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.model.refresh(reason: "shown") }
+        }
     }
 
     /// Reads the look of a visible Rex ChromeIconButton at rest and hovered.
@@ -904,7 +948,7 @@ final class PanelHost: NSObject {
             if let sh = l as? CAShapeLayer { line += " fill=\(sh.fillColor?.components ?? []) stroke=\(sh.strokeColor?.components ?? []) lw=\(sh.lineWidth) path=\(sh.path?.boundingBox ?? .zero)" }
             if let f = l.compositingFilter { line += " comp=\(f)" }
             if l.borderWidth > 0 { line += " border=\(l.borderWidth) \(l.borderColor?.components ?? [])" }
-            if l.shadowOpacity > 0 { line += " shadow=\(l.shadowOpacity) r=\(l.shadowRadius)" }
+            if l.shadowOpacity > 0 { line += " shadow=\(l.shadowOpacity) r=\(l.shadowRadius) off=\(l.shadowOffset) color=\(l.shadowColor?.components ?? [])" }
             out.append(line)
             for sl in l.sublayers ?? [] { layers(sl, depth + 1) }
         }

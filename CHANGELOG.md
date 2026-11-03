@@ -2,6 +2,31 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed
+
+- The Changes panel is laid out as three tabs, each with its own actions: *Info*, *Changes* and *Files*. A tab shows only its icon until you select it, so they fit a narrow panel, and the Changes tab shows how many comments are pending. Find File and Refresh moved from the header to the tabs they act on.
+- The *Changes* tab leads with the branch and its added and removed lines, then lists files with the status first, in groups: *Staged* and *Unstaged* for Uncommitted, *Changed* for Last Turn and Branch. The tree is one click away and stays selected.
+- Pending review comments moved from a popover to the top of the *Changes* tab, with a *Send* button. The comment bubble in the header is gone.
+- The panel opens and closes with the spring Rex's own sidebar uses (measured frame by frame), and stays on screen while Rex's content slides back over it instead of vanishing first.
+- Motion: switching tabs widens the new tab in place as its surface fades in and narrows the old one as its surface fades out, in 150 ms, then swaps the icon colours and fades in the tab's name; the selection moves between Last Turn, Uncommitted and Branch the same way; folder chevrons turn and their files fade in; files the agent touches, and comments once sent, fade in and out; counts roll; the "in progress" dot breathes. Nothing moves with Reduce Motion on.
+
+### Added
+
+- The panel follows Rex's Interface settings: selected tabs, pills and buttons are drawn the way Rex draws its selected tab in Classic and in Glass, tinted with the theme or not, light or dark, and flat in an inactive window. A change in Rex's Settings shows at once.
+- An *Info* tab: the working directory with Copy Path and Reveal in Finder; the followed agent's state as it reports it to Rex (working, waiting for you, idle), with Copy Session ID and Copy Resume Command for Claude Code; your Claude plan's session (5h) and weekly (7d) usage with their reset times, read from what Claude Code caches; the jobs running in the agent's pane; the ports the tab's panes listen on (click one to open it); the other agents of the tab (click one to follow it); and the pending comments.
+- `rexmod info` prints the same as JSON.
+- `rexmod state` and `rexmod changes` mark files as `staged` in the uncommitted view when all of their change is in the index.
+
+### Fixed
+
+- "Uncommitted" no longer gets cut short in the panel's default width.
+- The first file tree no longer stalls while the icon theme loads; it loads in the background at start.
+- The panel no longer draws over Rex's content while it opens or closes: it is revealed and covered by Rex's moving edge, as Rex's sidebar is.
+- Opening and closing the panel does less work per frame: the panel is revealed by a mask instead of being moved, the toggle isn't placed again on every frame, and the panel isn't redrawn when it starts. The terminal no longer goes past its final width with the spring's overshoot, which made it rewrap (and an agent redraw) twice more as the panel settled.
+- A button's shortcut tip and hover circle no longer stay on screen when the button is hidden or moves away from the pointer (for instance the panel toggle, after `⌘⇧E`).
+
 ## [0.1.11] - 2026-11-02
 
 ### Fixed

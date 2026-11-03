@@ -13,6 +13,8 @@ make build        # rexmod CLI into build/
 ln -sf "$PWD/build/rexmod" ~/.local/bin/rexmod
 make panel        # panel dylib into ~/Library/Application Support/rexmod; restart Rex
 make test lint
+make preview      # panel views without Rex: screenshots and checks in build/preview
+build/rexmod-preview build/preview --animate   # plays each animation once, to record
 ```
 
 Point the editor at your checkout so Lua changes are live: in
