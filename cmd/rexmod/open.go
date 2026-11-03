@@ -113,17 +113,10 @@ func openInEditor(session, window, file string, line int) error {
 	extra["REXMOD_SESSION"] = t.SessionID
 	extra["REXMOD_WINDOW"] = t.WindowID
 	env := envArgs(extra)
-	nvim := nvimBin()
-	for _, kv := range env {
-		if p, ok := strings.CutPrefix(kv, "PATH="); ok {
-			if found := lookPathIn(p, "nvim"); found != "" {
-				nvim = found
-			}
-		}
-	}
 	args = append(args, "--", "/usr/bin/env")
 	args = append(args, env...)
-	args = append(args, nvim, "--listen", sock)
+	// rexmod's editor: one Neovim behind Rex panes, each window its own pane
+	args = append(args, selfPath(), "editor", "--listen", sock)
 	if line > 0 {
 		args = append(args, fmt.Sprintf("+%d", line))
 	}

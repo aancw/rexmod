@@ -20,11 +20,11 @@ release:          ## release tarball in build/release
 	scripts/package-release.sh
 
 test:
-	cd cmd/rexmod && go vet ./... && go test ./...
+	go vet ./... && go test ./...
 
 lint:
 	shellcheck -s sh install.sh uninstall.sh scripts/*.sh panel/build.sh
-	gofmt -l cmd
+	gofmt -l cmd internal
 
 install: dist
 	./install.sh

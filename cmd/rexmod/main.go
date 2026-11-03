@@ -66,6 +66,12 @@ func main() {
 		err = cmdHook(os.Args[2:])
 	case "follow":
 		err = cmdFollow(os.Args[2:])
+	case "editor":
+		err = cmdEditor(os.Args[2:])
+	case "editor-pane":
+		err = cmdEditorPane(os.Args[2:])
+	case "editor-daemon":
+		err = cmdEditorDaemon(os.Args[2:])
 	case "warm":
 		// Refresh the cached login environment if it is stale.
 		_ = loginEnv()
