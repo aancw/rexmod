@@ -398,6 +398,9 @@ func resolveTarget(session, window string) (*Target, error) {
 			cwd := fg.Cwd
 			if r := recordedPaneCwd(b.BlockID, fg.Pid); r != "" {
 				cwd = r // e.g. a Claude Code worktree
+			} else if a == "Claude" {
+				// No hook since it started (or since rexmod was updated).
+				cwd = worktreeInUse(cwd, claudeTranscript(fg.Pid))
 			}
 			t.Agents = append(t.Agents, AgentPane{BlockID: b.BlockID, Agent: a, Name: a, cwd: cwd})
 		}

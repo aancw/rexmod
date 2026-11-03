@@ -112,12 +112,8 @@ func worktreeInUse(cwd, transcript string) string {
 		}
 		best, at := "", -1
 		for _, t := range trees {
-			// The path followed by a separator or a quote, so a worktree
-			// named like the prefix of another isn't taken for it.
-			for _, end := range []string{"/", `"`, " ", "'", `\`} {
-				if j := strings.LastIndex(l, t+end); j > at {
-					best, at = t, j
-				}
+			if j := lastPathIndex(l, t); j > at {
+				best, at = t, j
 			}
 		}
 		if best != "" {
@@ -151,4 +147,24 @@ func readTail(path string, n int64) string {
 	b := make([]byte, st.Size()-off)
 	n2, _ := f.ReadAt(b, off)
 	return string(b[:n2])
+}
+
+// lastPathIndex returns where path last appears in s as a whole path, not
+// as the prefix of a longer name (worktrees "a" and "ab"), or -1.
+func lastPathIndex(s, path string) int {
+	for end := len(s); ; {
+		j := strings.LastIndex(s[:end], path)
+		if j < 0 {
+			return -1
+		}
+		k := j + len(path)
+		if k == len(s) || !isNameByte(s[k]) {
+			return j
+		}
+		end = j
+	}
+}
+
+func isNameByte(c byte) bool {
+	return c == '-' || c == '_' || c == '.' || c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z'
 }

@@ -326,3 +326,17 @@ func parseLsof(out string) []Port {
 	sort.Slice(ports, func(i, j int) bool { return ports[i].Port < ports[j].Port })
 	return ports
 }
+
+// claudeTranscript returns the transcript of the Claude Code session that
+// process pid runs, or "".
+func claudeTranscript(pid int) string {
+	id := claudeSession(pid)
+	if id == "" {
+		return ""
+	}
+	m, _ := filepath.Glob(filepath.Join(claudeDir(), "projects", "*", id+".jsonl"))
+	if len(m) == 0 {
+		return ""
+	}
+	return m[0]
+}

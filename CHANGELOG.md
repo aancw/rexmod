@@ -2,6 +2,13 @@
 
 All notable changes to rexmod. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.15] - 2026-11-03
+
+### Fixed
+
+- The panel finds a Claude Code agent's worktree at once, from its transcript, instead of waiting for its next turn; agents already running when rexmod was updated show their worktree too.
+- A worktree path followed by a backtick or other punctuation in the agent's words is recognised.
+
 ## [0.1.14] - 2026-11-03
 
 ### Fixed

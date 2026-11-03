@@ -49,6 +49,10 @@ func TestWorktreeInUse(t *testing.T) {
 	if got := worktreeInUse(root, tr); got != root+"/wt/a" {
 		t.Fatalf("tool output counted: got %q", got)
 	}
+	write("Worktree'yi `" + root + "/wt/a` konumuna taşıdım.")
+	if got := worktreeInUse(root, tr); got != root+"/wt/a" {
+		t.Fatalf("backtick: got %q", got)
+	}
 	write(`nothing`)
 	if got := worktreeInUse(root, tr); got != root {
 		t.Fatalf("got %q", got)
