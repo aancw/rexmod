@@ -102,18 +102,36 @@ func worktreeInUse(cwd, transcript string) string {
 	if len(trees) == 0 {
 		return cwd
 	}
-	tail := readTail(transcript, 4<<20)
-	best, at := cwd, -1
-	for _, t := range trees {
-		// The path followed by a separator or a quote, so a worktree named
-		// like the prefix of another isn't taken for it.
-		for _, end := range []string{"/", `"`, " ", "'", "\n"} {
-			if i := strings.LastIndex(tail, t+end); i > at {
-				best, at = t, i
+	// Only what the agent itself did: its commands, edits and words. Tool
+	// output (git worktree list, ls, grep) names worktrees it isn't in.
+	lines := strings.Split(readTail(transcript, 4<<20), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := lines[i]
+		if isToolOutput(l) {
+			continue
+		}
+		best, at := "", -1
+		for _, t := range trees {
+			// The path followed by a separator or a quote, so a worktree
+			// named like the prefix of another isn't taken for it.
+			for _, end := range []string{"/", `"`, " ", "'", `\`} {
+				if j := strings.LastIndex(l, t+end); j > at {
+					best, at = t, j
+				}
 			}
 		}
+		if best != "" {
+			return best
+		}
 	}
-	return best
+	return cwd
+}
+
+// isToolOutput tells a transcript line that carries a tool's result:
+// Claude Code's tool_result, Codex's function_call_output.
+func isToolOutput(l string) bool {
+	return strings.Contains(l, `"tool_result"`) || strings.Contains(l, `"toolUseResult"`) ||
+		strings.Contains(l, `"function_call_output"`) || strings.Contains(l, `"custom_tool_call_output"`)
 }
 
 func readTail(path string, n int64) string {

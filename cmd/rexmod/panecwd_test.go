@@ -44,6 +44,11 @@ func TestWorktreeInUse(t *testing.T) {
 	if got := worktreeInUse(root, tr); got != root+"/wt/ab" {
 		t.Fatalf("got %q", got)
 	}
+	write(`{"file_path":"` + root + `/wt/a/x.go"}` + "\n" +
+		`{"type":"tool_result","content":"` + root + `/wt/ab  abc [b]"}`)
+	if got := worktreeInUse(root, tr); got != root+"/wt/a" {
+		t.Fatalf("tool output counted: got %q", got)
+	}
 	write(`nothing`)
 	if got := worktreeInUse(root, tr); got != root {
 		t.Fatalf("got %q", got)
