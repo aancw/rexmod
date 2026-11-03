@@ -25,7 +25,21 @@ INSERT="$PREFIX/bin/insertdylib"
 [ -f "$DYLIB" ] || { echo "panel dylib not found at $DYLIB; run install.sh first" >&2; exit 1; }
 [ -d "$APP" ] || { echo "Rex not found at $APP" >&2; exit 1; }
 
+# Rex can ship a universal binary, and insertdylib only reads a thin one.
+# The panel is arm64, so the patched app keeps only the arm64 slice.
+ARCH=arm64
+is_fat() { lipo -info "$1" 2>/dev/null | grep -q "^Architectures in the fat file"; }
+
 if [ "$MODE" = "--check" ]; then
+  if is_fat "$APP/$BIN_REL"; then
+    # Still fat means not patched, but report it the way insertdylib does.
+    T="$(mktemp)"
+    lipo -thin "$ARCH" "$APP/$BIN_REL" -output "$T"
+    rc=0
+    "$INSERT" --check "$T" "$DYLIB" || rc=$?
+    rm -f "$T"
+    exit "$rc"
+  fi
   exec "$INSERT" --check "$APP/$BIN_REL" "$DYLIB"
 fi
 # One patch at a time: a re-patch agent and an install can fire together
@@ -69,6 +83,10 @@ fi
 STAGE="$(mktemp -d)"
 S="$STAGE/Rex Beta.app"
 ditto "$APP" "$S"
+if is_fat "$S/$BIN_REL"; then
+  lipo -thin "$ARCH" "$S/$BIN_REL" -output "$S/$BIN_REL.thin"
+  mv "$S/$BIN_REL.thin" "$S/$BIN_REL"
+fi
 "$INSERT" "$S/$BIN_REL" "$DYLIB"
 
 ENT="$STAGE/entitlements.plist"
