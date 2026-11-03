@@ -323,7 +323,7 @@ func markStaged(repo string, files []FileChange) {
 	}
 }
 
-// listFiles returns tracked and untracked (not ignored) files, relative to repo.
+// listFiles returns tracked, untracked and loose ignored files, relative to repo.
 func listFiles(repo string, changedOnly bool) ([]string, error) {
 	if changedOnly {
 		c, err := computeChanges(repo, "branch", "", "")
@@ -341,6 +341,15 @@ func listFiles(repo string, changedOnly bool) ([]string, error) {
 	out, err := git(repo, "ls-files", "-z", "-c", "-o", "--exclude-standard", "--deduplicate")
 	if err != nil {
 		return nil, err
+	}
+	// Ignored files that sit on their own, such as .env.development.local;
+	// a wholly ignored directory (node_modules, build output) stays out.
+	if ign, err := git(repo, "ls-files", "-z", "-o", "-i", "--exclude-standard", "--directory", "--no-empty-directory"); err == nil {
+		for _, f := range strings.Split(ign, "\x00") {
+			if f != "" && !strings.HasSuffix(f, "/") {
+				out += "\x00" + f
+			}
+		}
 	}
 	var files []string
 	for _, f := range strings.Split(out, "\x00") {
