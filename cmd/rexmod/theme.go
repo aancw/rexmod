@@ -225,6 +225,42 @@ func saveRexTheme(arg string) {
 	}
 }
 
+// rexThemeColors are the background, foreground and dim (bright black)
+// colors of Rex's theme in effect: read here on the Mac, or as the Mac
+// handed it over. "" each when there's no theme.
+func rexThemeColors() (bg, fg, dim string) {
+	var raw []byte
+	if runtime.GOOS == "darwin" {
+		raw = []byte(rexThemeArg())
+	} else {
+		raw, _ = os.ReadFile(rexThemePath())
+	}
+	var snap rexThemeSnapshot
+	if json.Unmarshal(raw, &snap) != nil {
+		return "", "", ""
+	}
+	t := snap.Dark
+	if snap.Appearance == "light" || t == nil {
+		t = snap.Light
+	}
+	if t == nil {
+		t = snap.Dark
+	}
+	if t == nil {
+		return "", "", ""
+	}
+	var src struct {
+		Background string   `json:"background"`
+		Foreground string   `json:"foreground"`
+		Ansi       []string `json:"ansi"`
+	}
+	_ = json.Unmarshal(t.Source, &src)
+	if len(src.Ansi) > 8 {
+		dim = src.Ansi[8]
+	}
+	return src.Background, src.Foreground, dim
+}
+
 // savedAppearance is the appearance in the theme the Mac handed over.
 func savedAppearance() string {
 	b, err := os.ReadFile(rexThemePath())
