@@ -156,6 +156,15 @@ func parseCustomThemes(data []byte) map[string]*rexThemeEntry {
 // rexThemeArg is the Mac's theme as an argument for a host's open or pick,
 // or "" when it can't be read (the host keeps what it has).
 var rexThemeArg = func() string {
+	key := rexThemeKey()
+	if key != "" {
+		if b, err := os.ReadFile(rexThemeCachePath()); err == nil {
+			var c rexThemeCache
+			if json.Unmarshal(b, &c) == nil && c.Key == key && c.Arg != "" {
+				return c.Arg
+			}
+		}
+	}
 	snap, err := readRexTheme()
 	if err != nil {
 		return ""
@@ -164,7 +173,44 @@ var rexThemeArg = func() string {
 	if err != nil {
 		return ""
 	}
+	if key != "" {
+		_ = writeJSONAtomic(rexThemeCachePath(), rexThemeCache{Key: key, Arg: string(b)})
+	}
 	return string(b)
+}
+
+// rexThemeCache is the theme read last, with what it was read from.
+type rexThemeCache struct {
+	Key string `json:"key"`
+	Arg string `json:"arg"`
+}
+
+func rexThemeCachePath() string { return filepath.Join(cacheDir(), "rex-theme-local.json") }
+
+// rexThemePlist is Rex's settings file; a variable for tests.
+var rexThemePlist = func() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library", "Preferences", "com.superlogical.rex.plist")
+}
+
+// rexThemeKey names what the theme is read from, by modification time:
+// Rex's settings, its themes.json, and the global settings that hold the
+// system appearance (Rex's "system" follows it). "" when there's nothing
+// to go by.
+func rexThemeKey() string {
+	st, err := os.Stat(rexThemePlist())
+	if err != nil {
+		return ""
+	}
+	key := fmt.Sprintf("%d", st.ModTime().UnixNano())
+	paths, _ := filepath.Glob(rexThemesGlob)
+	paths = append(paths, filepath.Join(filepath.Dir(rexThemePlist()), ".GlobalPreferences.plist"))
+	for _, p := range paths {
+		if st, err := os.Stat(p); err == nil {
+			key += fmt.Sprintf(":%s@%d", p, st.ModTime().UnixNano())
+		}
+	}
+	return key
 }
 
 // saveRexTheme keeps a theme the Mac handed over, if it is one.

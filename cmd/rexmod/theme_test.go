@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 )
 
 func TestParseCustomThemes(t *testing.T) {
@@ -35,5 +38,30 @@ func TestSaveRexTheme(t *testing.T) {
 	saveRexTheme(`{"appearance":"light","light":{"id":"x","source":{}}}`)
 	if a := savedAppearance(); a != "light" {
 		t.Errorf("appearance %q", a)
+	}
+}
+
+// The theme is read again only when what it's read from changes.
+func TestRexThemeArgCached(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("Rex's theme is read on macOS")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CACHE_HOME", "")
+	plist := filepath.Join(home, "rex.plist")
+	os.WriteFile(plist, []byte("x"), 0o644)
+	old := rexThemePlist
+	rexThemePlist = func() string { return plist }
+	t.Cleanup(func() { rexThemePlist = old })
+
+	os.WriteFile(rexThemeCachePath(), []byte(`{"key":"`+rexThemeKey()+`","arg":"{\"appearance\":\"cached\"}"}`), 0o644)
+	if got := rexThemeArg(); got != `{"appearance":"cached"}` {
+		t.Errorf("same key: %q, want the cached theme", got)
+	}
+	later := time.Now().Add(time.Minute)
+	os.Chtimes(plist, later, later)
+	if got := rexThemeArg(); got == `{"appearance":"cached"}` {
+		t.Error("settings changed, still the cached theme")
 	}
 }
