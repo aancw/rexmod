@@ -33,7 +33,12 @@ var serveRunTimeout = 20 * time.Second
 const (
 	serveAction = "rexmod.run"
 	serveLabel  = "rexmod-serve"
-	serveProto  = 1
+	// serveUILabel is the service's second client, for what a person starts
+	// (open, pick, follow, comments send): Rex hands a client one request at
+	// a time, so on the main one an open would wait out the panel's state.
+	// Not "rexmod-serve#…": nothing takes it for another service.
+	serveUILabel = "rexmod-serve-ui"
+	serveProto   = 1
 	// Room for the reply envelope (call_id, result keys) under the limit.
 	serveEnvelope = 4096
 )
@@ -107,6 +112,16 @@ func cmdServe(args []string) error {
 	}
 	s.session, s.block = os.Getenv("REX_SESSION"), os.Getenv("REX_BLOCK")
 	s.detachSelf(s.session, s.block)
+	// the interactive client; without it, the Mac sends everything to the main one
+	if c2, err := rex.Connect(srv); err != nil {
+		fmt.Fprintln(os.Stderr, "rexmod serve: interactive client:", err)
+	} else {
+		defer c2.Close()
+		k2 := rex.NewCaller(c2)
+		if err := s.serveUI(k2, k2.Events); err != nil {
+			fmt.Fprintln(os.Stderr, "rexmod serve: interactive client:", err)
+		}
+	}
 	s.sweep()
 	err = s.loop()
 	if err == errUpgraded {
@@ -114,6 +129,33 @@ func cmdServe(args []string) error {
 		return nil
 	}
 	return err
+}
+
+// uiRex is what the interactive client needs of its connection.
+type uiRex interface {
+	replier
+	SetLabel(label string) error
+	DeclareActions(actions ...rex.Action) error
+}
+
+// serveUI makes k the interactive client: it declares rexmod.run, then
+// takes its label (so the Mac finds it only once it answers), and answers
+// its requests in a goroutine of their own, beside the main client's.
+func (s *server) serveUI(k uiRex, events <-chan *rex.Event) error {
+	if err := k.DeclareActions(rex.Action{Name: serveAction, Title: "rexmod"}); err != nil {
+		return err
+	}
+	if err := k.SetLabel(serveUILabel); err != nil {
+		return err
+	}
+	go func() {
+		for e := range events {
+			if r, ok := rex.ParsePerform(e); ok {
+				s.handleOn(k, r)
+			}
+		}
+	}()
+	return nil
 }
 
 // detachSelf takes the service's pane out of its window when it runs in
@@ -271,13 +313,22 @@ func serveAllowed(argv []string) bool {
 	return false
 }
 
-func (s *server) handle(r rex.PerformRequest) {
+func (s *server) handle(r rex.PerformRequest) { s.handleOn(s.rex, r) }
+
+// replier answers perform requests: the main client, or the interactive one.
+type replier interface {
+	Reply(callID string, result any) error
+	ReplyError(callID, code, message string) error
+}
+
+// handleOn answers r on the connection it came in on.
+func (s *server) handleOn(on replier, r rex.PerformRequest) {
 	if r.Action != serveAction {
-		_ = s.rex.ReplyError(r.CallID, "not_supported", "rexmod serve has no action "+r.Action)
+		_ = on.ReplyError(r.CallID, "not_supported", "rexmod serve has no action "+r.Action)
 		return
 	}
 	if p, _ := rex.GetInt(r.Args, "proto"); p != serveProto {
-		_ = s.rex.ReplyError(r.CallID, "not_supported", fmt.Sprintf("rexmod serve speaks proto %d, not %d", serveProto, p))
+		_ = on.ReplyError(r.CallID, "not_supported", fmt.Sprintf("rexmod serve speaks proto %d, not %d", serveProto, p))
 		return
 	}
 	raw, _ := rex.Get(r.Args, "argv").([]any)
@@ -285,27 +336,27 @@ func (s *server) handle(r rex.PerformRequest) {
 	for _, a := range raw {
 		str, ok := rex.Str(a)
 		if !ok {
-			_ = s.rex.ReplyError(r.CallID, "refused", "argv must be strings")
+			_ = on.ReplyError(r.CallID, "refused", "argv must be strings")
 			return
 		}
 		argv = append(argv, str)
 	}
 	if !serveAllowed(argv) {
-		_ = s.rex.ReplyError(r.CallID, "refused", fmt.Sprintf("rexmod serve doesn't run %q", strings.Join(argv, " ")))
+		_ = on.ReplyError(r.CallID, "refused", fmt.Sprintf("rexmod serve doesn't run %q", strings.Join(argv, " ")))
 		return
 	}
 	stdout, stderr, code, err := s.run(argv)
 	if err != nil {
-		_ = s.rex.ReplyError(r.CallID, "internal", err.Error())
+		_ = on.ReplyError(r.CallID, "internal", err.Error())
 		return
 	}
 	s.track(argv, stdout)
 	reply := serveReply{Proto: serveProto, Version: rexmodVersion(), Stdout: stdout, Stderr: stderr, Code: code}
 	if b, _ := json.Marshal(reply); s.maxMsg > 0 && len(b) > s.maxMsg-serveEnvelope {
-		_ = s.rex.ReplyError(r.CallID, "internal", fmt.Sprintf("too_large: %d bytes, over Rex's %d", len(b), s.maxMsg))
+		_ = on.ReplyError(r.CallID, "internal", fmt.Sprintf("too_large: %d bytes, over Rex's %d", len(b), s.maxMsg))
 		return
 	}
-	_ = s.rex.Reply(r.CallID, reply)
+	_ = on.Reply(r.CallID, reply)
 }
 
 // track watches the repository a request was about: state names it in its

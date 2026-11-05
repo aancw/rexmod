@@ -434,3 +434,58 @@ func TestServeLeave(t *testing.T) {
 		t.Error("destroyed without a session")
 	}
 }
+
+// An open on the interactive client is answered while the main client is
+// still busy with a slow state.
+func TestServeUIAnswersBesideMain(t *testing.T) {
+	main, ui := newFakeServeRex("client:05"), newFakeServeRex("client:06")
+	release := make(chan struct{})
+	s := &server{rex: main, maxMsg: 1 << 20, watch: newRepoWatch(nil), run: func(argv []string) (string, string, int, error) {
+		if argv[0] == "state" {
+			<-release
+		}
+		return "{}", "", 0, nil
+	}}
+	events := make(chan *rex.Event, 1)
+	if err := s.serveUI(ui, events); err != nil {
+		t.Fatal(err)
+	}
+	if len(ui.declared) != 1 || ui.declared[0].Name != serveAction || ui.labels[len(ui.labels)-1] != serveUILabel {
+		t.Fatalf("interactive client: declared %v, labels %v", ui.declared, ui.labels)
+	}
+	go s.handle(perform("slow", []string{"state", "--session", "s"}))
+	events <- performEvent(perform("open", []string{"open", "--session", "s", "/r/a.go"}))
+	deadline := time.Now().Add(time.Second)
+	for {
+		ui.mu.Lock()
+		_, ok := ui.replies["open"]
+		ui.mu.Unlock()
+		if ok {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("open waited for the slow state")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	main.mu.Lock()
+	_, stateDone := main.replies["slow"]
+	main.mu.Unlock()
+	if stateDone {
+		t.Error("state finished before it was released")
+	}
+	close(release)
+}
+
+// The interactive client is no second service to the main one's claim.
+func TestServeClaimIgnoresUIClient(t *testing.T) {
+	f := newFakeServeRex("client:05", serveClient("client:03", serveUILabel))
+	s := &server{rex: f}
+	if first, err := s.claim(); err != nil || !first {
+		t.Fatalf("claim with an interactive client around: %v %v", first, err)
+	}
+}
+
+func performEvent(r rex.PerformRequest) *rex.Event {
+	return &rex.Event{Name: "client_perform_requested", Payload: map[string]any{"call_id": r.CallID, "action": r.Action, "args": r.Args}}
+}
