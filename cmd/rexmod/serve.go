@@ -69,7 +69,8 @@ type server struct {
 	seq      int    // label generation; each bump is an event
 	run      func(argv []string) (stdout, stderr string, code int, err error)
 	watch    *repoWatch
-	exe      string // our binary, to notice an upgrade
+	prewarm  *prewarmer // nil: none
+	exe      string     // our binary, to notice an upgrade
 	exeMtime time.Time
 	session  string // our pane's session and block, when started in one
 	block    string
@@ -100,6 +101,7 @@ func cmdServe(args []string) error {
 	exe, _ := os.Executable()
 	s := &server{rex: k, events: k.Events, done: k.Done(), maxMsg: c.MaxMessage, run: runSelf(exe), exe: exe}
 	s.watch = newRepoWatch(s.bump)
+	s.prewarm = newPrewarmer()
 	if st, err := os.Stat(exe); err == nil {
 		s.exeMtime = st.ModTime()
 	}
@@ -382,6 +384,9 @@ func (s *server) track(argv []string, stdout string) {
 	}
 	if repo != "" {
 		s.watch.track(repo, time.Now())
+		if s.prewarm != nil {
+			s.prewarm.asked(repo, time.Now())
+		}
 	}
 }
 

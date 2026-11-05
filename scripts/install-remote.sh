@@ -165,6 +165,25 @@ if [ -n "$BOOTSTRAP" ] && command -v nvim >/dev/null 2>&1; then
     || note "plugin install didn't finish; it completes the first time the editor opens"
 fi
 
+# A local copy of the editor's data (rexmod keeps one when the home is on a
+# network filesystem) would keep the old plugins: drop it, and the next open
+# copies the data afresh.
+COPY_ROOT=""
+if command -v python3 >/dev/null 2>&1 && [ -s "$CFG" ]; then
+  COPY_ROOT="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("editor_data_dir",""))' "$CFG" 2>/dev/null || true)"
+fi
+case "$COPY_ROOT" in
+  off) COPY_ROOT="" ;;
+  "~/"*) COPY_ROOT="$HOME/${COPY_ROOT#\~/}" ;;
+  /*) ;;
+  "") COPY_ROOT="/var/tmp/rexmod-$(id -u)" ;;
+  *) COPY_ROOT="" ;; # a relative path: rexmod takes it as off too
+esac
+if [ -n "$COPY_ROOT" ] && [ -d "$COPY_ROOT/data" ]; then
+  say "Dropping the local copy of the editor's data in $COPY_ROOT (the next open makes a new one)"
+  rm -rf "$COPY_ROOT/data" "$COPY_ROOT/cache" "$COPY_ROOT/.copy.failed"
+fi
+
 # Keys in a session on this host go to its Rex server and its own init.lua:
 # the picker and pane keys go there too. Where Rex looks for it as the login
 # shell (which starts the server) sees it.

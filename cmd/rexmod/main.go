@@ -85,6 +85,8 @@ func main() {
 		err = cmdEditorPane(os.Args[2:])
 	case "editor-daemon":
 		err = cmdEditorDaemon(os.Args[2:])
+	case "editor-data-copy":
+		err = cmdEditorDataCopy(os.Args[2:])
 	case "serve":
 		err = cmdServe(os.Args[2:])
 	case "remote-events":

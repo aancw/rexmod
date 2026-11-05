@@ -9,12 +9,18 @@ import (
 	"strings"
 )
 
+// cacheDir is rexmod's cache: REXMOD_CACHE_DIR when the editor's
+// environment pins it (its XDG_CACHE_HOME may point elsewhere), otherwise
+// rexmod/ in the user's cache directory.
 func cacheDir() string {
-	d, err := os.UserCacheDir()
-	if err != nil {
-		d = os.TempDir()
+	d := os.Getenv("REXMOD_CACHE_DIR")
+	if !filepath.IsAbs(d) {
+		base, err := os.UserCacheDir()
+		if err != nil {
+			base = os.TempDir()
+		}
+		d = filepath.Join(base, "rexmod")
 	}
-	d = filepath.Join(d, "rexmod")
 	_ = os.MkdirAll(d, 0o755)
 	return d
 }
@@ -31,9 +37,13 @@ func shortID(id string) string {
 }
 
 // rexmodDataDir is rexmod's own data directory on a host without the Mac
-// install (a remote Rex host): $XDG_DATA_HOME/rexmod, ~/.local/share/rexmod
-// by default.
+// install (a remote Rex host): REXMOD_DATA_DIR when the editor's
+// environment pins it (its XDG_DATA_HOME may point elsewhere), otherwise
+// $XDG_DATA_HOME/rexmod, ~/.local/share/rexmod by default.
 func rexmodDataDir() string {
+	if d := os.Getenv("REXMOD_DATA_DIR"); filepath.IsAbs(d) {
+		return d
+	}
 	if d := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(d) {
 		return filepath.Join(d, "rexmod")
 	}
@@ -137,6 +147,14 @@ func openInEditor(session, window, file string, line int) error {
 	if runtime.GOOS != "darwin" {
 		// Rex's theme as the Mac handed it over (rex_theme.lua)
 		extra["REXMOD_REX_THEME"] = rexThemePath()
+	}
+	// Its data on a local disk when it's on a network filesystem.
+	paneEnv := loginEnv()
+	for k, v := range extra {
+		paneEnv[k] = v
+	}
+	for k, v := range editorDataEnv(paneEnv, loadConfig()) {
+		extra[k] = v
 	}
 	env := envArgs(extra)
 	args = append(args, "--", "/usr/bin/env")
