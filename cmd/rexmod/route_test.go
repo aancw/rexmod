@@ -144,3 +144,49 @@ func TestRouteRemoteStateUnreachable(t *testing.T) {
 		t.Error("target: want an error")
 	}
 }
+
+func TestSessionMissing(t *testing.T) {
+	stderr := "rexmod: rex api call -s paper session.view: exit status 3: Error: session target \"paper\" not found\n"
+	if !sessionMissing("paper", nil, &remoteExit{Code: 1, Stderr: stderr}) {
+		t.Error("target's error not recognised")
+	}
+	st := []byte(`{"target":null,"error":"rex api call -s paper session.view: exit status 3: Error: session target \"paper\" not found","time":"t"}`)
+	if !sessionMissing("paper", st, nil) {
+		t.Error("state's error not recognised")
+	}
+	if sessionMissing("paper", []byte(`{"target":{"repo":"/r"}}`), nil) || sessionMissing("other", st, nil) ||
+		sessionMissing("paper", nil, &remoteExit{Code: 1, Stderr: "rexmod: boom"}) {
+		t.Error("false positive")
+	}
+}
+
+// A session that moved: the remembered host says it's not there; the route
+// looks again and runs on the host that has it, once.
+func TestRouteRemoteSessionMoved(t *testing.T) {
+	f := gpuHosts()
+	withFakeRex(t, f)
+	saveSessionHosts(map[string]string{"paper": "gpu2"}) // stale: it's on gpu3
+	var ran []string
+	old := runHost
+	runHost = func(host string, args []string) ([]byte, error) {
+		ran = append(ran, host)
+		if host == "gpu2" {
+			return nil, &remoteExit{Code: 1, Stderr: "rexmod: Error: session target \"paper\" not found\n"}
+		}
+		return []byte(`{"session_id":"session:c","repo":"/r"}` + "\n"), nil
+	}
+	t.Cleanup(func() { runHost = old })
+	r, w, _ := os.Pipe()
+	stdout := os.Stdout
+	os.Stdout = w
+	handled, err := routeRemote("target", []string{"--session", "paper"})
+	w.Close()
+	os.Stdout = stdout
+	out, _ := io.ReadAll(r)
+	if !handled || err != nil || !reflect.DeepEqual(ran, []string{"gpu2", "gpu3"}) || !strings.Contains(string(out), `"host":"gpu3"`) {
+		t.Errorf("handled=%v err=%v ran=%v out=%s", handled, err, ran, out)
+	}
+	if m := loadSessionHosts(); m["paper"] != "gpu3" {
+		t.Errorf("cache: %v", m)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -18,8 +19,9 @@ func routeRemote(cmd string, args []string) (handled bool, err error) {
 		return false, nil
 	}
 	args, host := takeFlag(args, "host")
+	session := ""
 	if host == "" {
-		session := flagValue(args, "session")
+		session = flagValue(args, "session")
 		if session == "" {
 			session = os.Getenv("REX_SESSION")
 		}
@@ -36,7 +38,18 @@ func routeRemote(cmd string, args []string) (handled bool, err error) {
 			args = append(args, "--rex-theme", theme)
 		}
 	}
-	out, err := runOnHost(host, append([]string{cmd}, args...))
+	out, err := runHost(host, append([]string{cmd}, args...))
+	if session != "" && sessionMissing(session, out, err) {
+		// The remembered host no longer has it (sessionHost doesn't ask):
+		// look again, and run there, or here, once.
+		if host, err = rescanSessionHost(session); err != nil {
+			return true, err
+		}
+		if host == "" {
+			return false, nil
+		}
+		out, err = runHost(host, append([]string{cmd}, args...))
+	}
 	var re *remoteExit
 	if err != nil && cmd == "state" && !errors.As(err, &re) {
 		// As for a local session the panel can't follow: the reason goes in
@@ -57,6 +70,27 @@ func routeRemote(cmd string, args []string) (handled bool, err error) {
 	}
 	_, err = os.Stdout.Write(out)
 	return true, err
+}
+
+// runHost runs a command on a Rex host; tests stand in for it.
+var runHost = runOnHost
+
+// sessionMissing says whether a remote rexmod failed because its Rex server
+// has no such session: in its stderr, or in the state's error.
+func sessionMissing(session string, out []byte, err error) bool {
+	msg := fmt.Sprintf("session target %q not found", session)
+	var re *remoteExit
+	if errors.As(err, &re) && strings.Contains(re.Stderr, msg) {
+		return true
+	}
+	if err != nil {
+		return false
+	}
+	var st struct {
+		Target *json.RawMessage `json:"target"`
+		Error  string           `json:"error"`
+	}
+	return json.Unmarshal(out, &st) == nil && st.Target == nil && strings.Contains(st.Error, msg)
 }
 
 // routable says whether a command acts on a session's repository or panes
