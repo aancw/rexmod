@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -32,7 +31,10 @@ func routeRemote(cmd string, args []string) (handled bool, err error) {
 		}
 	}
 	if cmd == "open" || cmd == "pick" {
-		return true, fmt.Errorf("the editor isn't supported on Rex hosts yet (%s)", host)
+		// The editor runs on the host, its colors from the Mac's Rex.
+		if theme := rexThemeArg(); theme != "" {
+			args = append(args, "--rex-theme", theme)
+		}
 	}
 	out, err := runOnHost(host, append([]string{cmd}, args...))
 	var re *remoteExit
@@ -62,10 +64,27 @@ func routeRemote(cmd string, args []string) (handled bool, err error) {
 // and comments the editor adds run where they're started: already there.
 func routable(cmd string, args []string) bool {
 	switch cmd {
-	case "target", "state", "info", "follow", "files", "open", "pick":
+	case "target", "state", "info", "follow", "files", "open":
 		return true
+	case "pick":
+		// --inner and --here run the picker in the pane they're started in
+		return !hasFlag(args, "inner") && !hasFlag(args, "here")
 	case "comments":
 		return len(args) > 0 && args[0] == "send"
+	}
+	return false
+}
+
+// hasFlag says whether args hold the boolean flag --name or -name.
+func hasFlag(args []string, name string) bool {
+	for _, a := range args {
+		if a == "--" {
+			return false
+		}
+		k := strings.TrimLeft(a, "-")
+		if strings.HasPrefix(a, "-") && (k == name || strings.HasPrefix(k, name+"=")) {
+			return true
+		}
 	}
 	return false
 }

@@ -1,8 +1,20 @@
 -- Review comments for your coding agent and the editor side of the Rex Changes panel.
--- Installed by rexmod into ~/Library/Application Support/rexmod/nvim.
+-- Installed by rexmod into ~/Library/Application Support/rexmod/nvim, or on a remote Rex host
+-- (scripts/install-remote.sh) into $XDG_DATA_HOME/rexmod/nvim.
+local function rexmod_dir()
+  if vim.fn.has("mac") == 1 then
+    return vim.fn.expand("~/Library/Application Support/rexmod/nvim")
+  end
+  local data = vim.env.XDG_DATA_HOME
+  if not data or data == "" then
+    data = vim.fn.expand("~/.local/share")
+  end
+  return data .. "/rexmod/nvim"
+end
+
 return {
   {
-    dir = vim.fn.expand("~/Library/Application Support/rexmod/nvim"),
+    dir = rexmod_dir(),
     name = "rexmod.nvim",
     lazy = false,
     config = function()

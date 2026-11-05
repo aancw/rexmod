@@ -206,6 +206,10 @@ func TestServeHandle(t *testing.T) {
 	s.handle(perform("c6", []string{"comments", "send", "--session", "s"}))
 	s.handle(perform("c7", []string{"follow", "--block", "b"}))
 	s.handle(rex.PerformRequest{CallID: "c8", Action: "other.thing"})
+	s.handle(perform("c10", []string{"open", "--session", "s", "/r/a.go"}))
+	s.handle(perform("c11", []string{"pick", "--session", "s"}))
+	s.handle(perform("c12", []string{"pick", "--inner", "--repo", "/r"}))
+	s.handle(perform("c13", []string{"editor", "a.go"}))
 	s.handle(rex.PerformRequest{CallID: "c9", Action: serveAction, Args: map[string]any{"proto": json.Number("2"), "argv": []any{"state"}}})
 
 	r1, ok := f.replies["c1"].(serveReply)
@@ -215,7 +219,12 @@ func TestServeHandle(t *testing.T) {
 	if r2, _ := f.replies["c2"].(serveReply); r2.Code != 1 || r2.Stderr != "rexmod: no session\n" {
 		t.Errorf("failing command: %#v", f.replies["c2"])
 	}
-	for _, id := range []string{"c3", "c4", "c5"} {
+	for _, id := range []string{"c10", "c11"} {
+		if _, ok := f.replies[id]; !ok {
+			t.Errorf("%s: not run: %q", id, f.errors[id])
+		}
+	}
+	for _, id := range []string{"c3", "c4", "c5", "c12", "c13"} {
 		if !strings.HasPrefix(f.errors[id], "refused: ") {
 			t.Errorf("%s: want refused, got %q", id, f.errors[id])
 		}

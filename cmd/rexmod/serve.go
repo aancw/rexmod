@@ -253,14 +253,18 @@ func (s *server) upgraded() bool {
 }
 
 // serveAllowed says whether argv is a command the service runs: those that
-// read the repository or act on Rex panes, never hooks or the editor.
+// read the repository or act on Rex panes (open and pick start the editor
+// or the picker in one), never hooks or the editor's own commands.
 func serveAllowed(argv []string) bool {
 	if len(argv) == 0 {
 		return false
 	}
 	switch argv[0] {
-	case "target", "state", "info", "files", "follow":
+	case "target", "state", "info", "files", "follow", "open":
 		return true
+	case "pick":
+		// the picker's layer, not the picker itself, which needs a terminal
+		return !hasFlag(argv[1:], "inner") && !hasFlag(argv[1:], "here")
 	case "comments":
 		return len(argv) > 1 && argv[1] == "send"
 	}

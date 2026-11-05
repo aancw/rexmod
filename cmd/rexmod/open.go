@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
@@ -29,24 +30,45 @@ func shortID(id string) string {
 	return id
 }
 
+// rexmodDataDir is rexmod's own data directory on a host without the Mac
+// install (a remote Rex host): $XDG_DATA_HOME/rexmod, ~/.local/share/rexmod
+// by default.
+func rexmodDataDir() string {
+	if d := os.Getenv("XDG_DATA_HOME"); filepath.IsAbs(d) {
+		return filepath.Join(d, "rexmod")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local", "share", "rexmod")
+}
+
 // editorSocket is the Neovim server address for the editor pane of a window.
 func editorSocket(windowID string) string {
-	return filepath.Join(cacheDir(), "nvim-"+shortID(windowID)+".sock")
+	return filepath.Join(socketDir(), "nvim-"+shortID(windowID)+".sock")
+}
+
+// socketDir holds the editor's sockets: $XDG_RUNTIME_DIR/rexmod, beside
+// Rex's own $XDG_RUNTIME_DIR/rex, where there is one (Linux); the cache
+// directory otherwise (macOS), which may be a network share elsewhere.
+// Rex starts every process that asks (the service, the editor's panes), so
+// they all see the same XDG_RUNTIME_DIR.
+func socketDir() string {
+	rt := os.Getenv("XDG_RUNTIME_DIR")
+	if runtime.GOOS == "darwin" || rt == "" || !filepath.IsAbs(rt) {
+		return cacheDir()
+	}
+	d := filepath.Join(rt, "rexmod")
+	if os.MkdirAll(d, 0o700) != nil {
+		return cacheDir()
+	}
+	if fi, err := os.Lstat(d); err != nil || !fi.IsDir() || !ownedByMe(fi) {
+		return cacheDir()
+	}
+	return d
 }
 
 func vimStr(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
-func nvimBin() string {
-	if p, err := exec.LookPath("nvim"); err == nil {
-		return p
-	}
-	for _, p := range []string{"/opt/homebrew/bin/nvim", "/usr/local/bin/nvim"} {
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	return "nvim"
-}
+func nvimBin() string { return toolBin("nvim") }
 
 func nvimAlive(sock string) bool {
 	if _, err := os.Stat(sock); err != nil {
@@ -112,6 +134,10 @@ func openInEditor(session, window, file string, line int) error {
 	extra["REXMOD_EDITOR"] = "1"
 	extra["REXMOD_SESSION"] = t.SessionID
 	extra["REXMOD_WINDOW"] = t.WindowID
+	if runtime.GOOS != "darwin" {
+		// Rex's theme as the Mac handed it over (rex_theme.lua)
+		extra["REXMOD_REX_THEME"] = rexThemePath()
+	}
 	env := envArgs(extra)
 	args = append(args, "--", "/usr/bin/env")
 	args = append(args, env...)

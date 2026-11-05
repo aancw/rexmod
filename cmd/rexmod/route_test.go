@@ -17,6 +17,7 @@ func TestRoutable(t *testing.T) {
 	}{
 		{"target", nil, true}, {"state", nil, true}, {"info", nil, true}, {"follow", nil, true},
 		{"files", nil, true}, {"open", nil, true}, {"pick", nil, true},
+		{"pick", []string{"--inner", "--repo", "/r"}, false}, {"pick", []string{"--here"}, false},
 		{"comments", []string{"send"}, true},
 		{"comments", []string{"add", "--file", "f"}, false}, // the editor adds them where it runs
 		{"hook", []string{"prompt"}, false}, {"editor", nil, false}, {"preview", nil, false}, {"warm", nil, false},
@@ -80,15 +81,39 @@ func TestRouteRemoteLocalSession(t *testing.T) {
 	}
 }
 
-func TestRouteRemoteEditorRefused(t *testing.T) {
+// open and pick run on the host, with the Mac's Rex theme for the editor.
+func TestRouteRemoteEditor(t *testing.T) {
 	f := gpuHosts()
 	withFakeRex(t, f)
 	fakeSSH(t)
+	home, _ := os.UserHomeDir()
+	os.MkdirAll(home+"/.config/rexmod", 0o755)
+	os.WriteFile(home+"/.config/rexmod/config.json", []byte(`{"remote_channel":"ssh"}`), 0o644)
+	old := rexThemeArg
+	rexThemeArg = func() string { return `{"appearance":"dark"}` }
+	t.Cleanup(func() { rexThemeArg = old })
 	for _, cmd := range []string{"open", "pick"} {
+		r, w, _ := os.Pipe()
+		stdout := os.Stdout
+		os.Stdout = w
 		handled, err := routeRemote(cmd, []string{"--session", "paper", "/r/a.go"})
-		if !handled || err == nil || err.Error() != "the editor isn't supported on Rex hosts yet (gpu3)" {
-			t.Errorf("%s: handled=%v err=%v", cmd, handled, err)
+		w.Close()
+		os.Stdout = stdout
+		out, _ := io.ReadAll(r)
+		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+		want := remoteCommand("~/.local/bin/rexmod", []string{cmd, "--session", "paper", "/r/a.go", "--rex-theme", `{"appearance":"dark"}`})
+		if !handled || err != nil || lines[len(lines)-1] != want {
+			t.Errorf("%s: handled=%v err=%v ran %q", cmd, handled, err, lines[len(lines)-1])
 		}
+	}
+}
+
+func TestHasFlag(t *testing.T) {
+	if !hasFlag([]string{"--session", "s", "-inner"}, "inner") || !hasFlag([]string{"--here=true"}, "here") {
+		t.Error("flag not found")
+	}
+	if hasFlag([]string{"inner"}, "inner") || hasFlag([]string{"--", "--inner"}, "inner") || hasFlag([]string{"--innerx"}, "inner") {
+		t.Error("not a flag, found")
 	}
 }
 
