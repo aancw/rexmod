@@ -197,7 +197,7 @@ func cmdState(args []string) error {
 		if err != nil {
 			return err
 		}
-		st.Target = &Target{Repo: root, RepoName: baseName(root), Branch: currentBranch(root)}
+		st.Target = &Target{Repo: root, RepoName: baseName(root), IsGit: true, Branch: currentBranch(root)}
 		if gd, err := git(root, "rev-parse", "--absolute-git-dir"); err == nil {
 			st.Target.GitDir = strings.TrimSpace(gd)
 		}
@@ -209,8 +209,8 @@ func cmdState(args []string) error {
 		}
 		st.Target = t
 	}
-	if st.Target.Repo == "" {
-		return printJSON(st)
+	if st.Target.Repo == "" || !st.Target.IsGit {
+		return printJSON(st) // no folder, or not a git repository: no changes or comments
 	}
 	now, err := snapshotTree(st.Target.Repo)
 	if err != nil {
@@ -239,8 +239,10 @@ func cmdState(args []string) error {
 }
 
 func repoFrom(flagRepo, file string) (string, error) {
+	// The panel passes the folder it already resolved; it may be a plain
+	// directory without git, which the files command still lists.
 	if flagRepo != "" {
-		return repoRoot(flagRepo)
+		return flagRepo, nil
 	}
 	if file != "" {
 		dir := file
@@ -281,7 +283,7 @@ func cmdFiles(args []string) error {
 	if err != nil {
 		return err
 	}
-	files, err := listFiles(r, *changed)
+	files, err := listRepoFiles(r, *changed)
 	if err != nil {
 		return err
 	}
@@ -323,7 +325,7 @@ func cmdPick(args []string) error {
 			return err
 		}
 		if t.Repo == "" {
-			return fmt.Errorf("the agent pane of this tab is not in a git repository")
+			return fmt.Errorf("no working folder in this tab to pick files from")
 		}
 		return pickInner(t.SessionID, t.WindowID, t.Repo)
 	}

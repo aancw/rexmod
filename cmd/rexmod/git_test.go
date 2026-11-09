@@ -74,3 +74,95 @@ func TestUncommittedMarksStaged(t *testing.T) {
 		}
 	}
 }
+
+func TestListPlainFiles(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a.txt", "a\n")
+	write(".env", "SECRET=1\n")                 // hidden file: kept
+	write("src/main.go", "package main\n")      // nested: kept
+	write("src/util/util.go", "package util\n") // nested: kept
+	write(".hidden/inside.txt", "x\n")          // hidden dir: pruned
+	write("node_modules/pkg/index.js", "x\n")   // ignored dir: pruned
+	write("build/output.bin", "x\n")            // ignored dir: pruned
+	if err := os.Symlink("a.txt", filepath.Join(dir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	files, err := listPlainFiles(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range files {
+		got[f] = true
+	}
+	want := []string{".env", "a.txt", "link.txt", "src/main.go", "src/util/util.go"}
+	if len(files) != len(want) {
+		t.Fatalf("got %v, want %v", files, want)
+	}
+	for _, f := range want {
+		if !got[f] {
+			t.Errorf("missing %q in %v", f, files)
+		}
+	}
+}
+
+func TestListRepoFilesDispatch(t *testing.T) {
+	// A plain folder walks the directory; a git repository lists git files.
+	plain := t.TempDir()
+	if err := os.WriteFile(filepath.Join(plain, "note.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, err := listRepoFiles(plain, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "note.txt" {
+		t.Fatalf("plain folder: got %v, want [note.txt]", files)
+	}
+	if changed, err := listRepoFiles(plain, true); err != nil || len(changed) != 0 {
+		t.Fatalf("plain folder changed-only: got %v, %v", changed, err)
+	}
+
+	repo := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-c", "user.name=t", "-c", "user.email=t@example.com"}, args...)...)
+		cmd.Dir = repo
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q")
+	if err := os.WriteFile(filepath.Join(repo, "committed.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "-A")
+	run("commit", "-qm", "init")
+	if err := os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	files, err = listRepoFiles(repo, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, f := range files {
+		got[f] = true
+	}
+	for _, f := range []string{"committed.txt", "untracked.txt"} {
+		if !got[f] {
+			t.Errorf("git repo missing %q in %v", f, files)
+		}
+	}
+}

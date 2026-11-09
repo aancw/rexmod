@@ -184,10 +184,13 @@ type Target struct {
 	EditorBlockID string      `json:"editor_block_id,omitempty"`
 	AnchorBlockID string      `json:"anchor_block_id,omitempty"` // where a new editor pane splits from
 	Cwd           string      `json:"cwd,omitempty"`
-	Repo          string      `json:"repo,omitempty"`
-	RepoName      string      `json:"repo_name,omitempty"`
-	Branch        string      `json:"branch,omitempty"`
-	GitDir        string      `json:"git_dir,omitempty"`
+	// Repo is the folder the panel acts on: the repo toplevel, or the cwd
+	// when that isn't a git repository (IsGit false, Files only).
+	Repo     string `json:"repo,omitempty"`
+	RepoName string `json:"repo_name,omitempty"`
+	IsGit    bool   `json:"is_git,omitempty"`
+	Branch   string `json:"branch,omitempty"`
+	GitDir   string `json:"git_dir,omitempty"`
 	// Host is the Rex host (rex hosts) the session lives on; empty here.
 	// Paths are then that host's.
 	Host string `json:"host,omitempty"`
@@ -352,6 +355,19 @@ const (
 	pickerLabel = "files"
 )
 
+// pickCwd picks the folder the panel acts on: the followed agent's working
+// directory, else the focused pane's, else the first pane inside a git
+// repository (used when no cwd can be read at all).
+func pickCwd(agentCwd, focusedCwd, fallbackCwd string) string {
+	if agentCwd != "" {
+		return agentCwd
+	}
+	if focusedCwd != "" {
+		return focusedCwd
+	}
+	return fallbackCwd
+}
+
 func resolveTarget(session, window string) (*Target, error) {
 	if session == "" {
 		session = os.Getenv("REX_SESSION")
@@ -470,24 +486,22 @@ func resolveTarget(session, window string) (*Target, error) {
 	default:
 		t.AnchorBlockID = firstTiled
 	}
-	t.Cwd = agentCwd
-	if t.Cwd == "" {
-		t.Cwd = focusedCwd
-		if _, err := repoRoot(t.Cwd); t.Cwd == "" || err != nil {
-			if fallbackCwd != "" {
-				t.Cwd = fallbackCwd
-			}
-		}
-	}
+	// The folder the panel acts on: the followed agent's, else the focused
+	// pane's own — a git repository or not, the Files tab lists any folder —
+	// else the first pane that sits in a git repository.
+	t.Cwd = pickCwd(agentCwd, focusedCwd, fallbackCwd)
 	if t.Cwd != "" {
 		if root, err := repoRoot(t.Cwd); err == nil {
 			t.Repo = root
-			t.RepoName = baseName(root)
+			t.IsGit = true
 			t.Branch = currentBranch(root)
 			if gd, err := git(root, "rev-parse", "--absolute-git-dir"); err == nil {
 				t.GitDir = strings.TrimSpace(gd)
 			}
+		} else {
+			t.Repo = t.Cwd // not a git repository; the Files tab still works
 		}
+		t.RepoName = baseName(t.Repo)
 	}
 	return t, nil
 }

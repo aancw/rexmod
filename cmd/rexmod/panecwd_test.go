@@ -21,6 +21,23 @@ func TestPaneCwdRecord(t *testing.T) {
 	}
 }
 
+func TestPickCwd(t *testing.T) {
+	// The focused pane's own folder wins over the git-repository fallback
+	// even when it isn't a repository: the Files tab lists any folder.
+	if got := pickCwd("", "/plain/dir", "/git/repo"); got != "/plain/dir" {
+		t.Errorf("focused plain folder: got %q, want /plain/dir", got)
+	}
+	if got := pickCwd("/agent/dir", "/focused", "/git/repo"); got != "/agent/dir" {
+		t.Errorf("agent cwd: got %q, want /agent/dir", got)
+	}
+	if got := pickCwd("", "", "/git/repo"); got != "/git/repo" {
+		t.Errorf("no focused cwd: got %q, want /git/repo", got)
+	}
+	if got := pickCwd("", "", ""); got != "" {
+		t.Errorf("nothing anywhere: got %q, want empty", got)
+	}
+}
+
 func TestWorktreeInUse(t *testing.T) {
 	root := t.TempDir()
 	for _, c := range [][]string{{"init", "-q", "-b", "main"}, {"commit", "-q", "--allow-empty", "-m", "x"},

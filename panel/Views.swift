@@ -1043,9 +1043,11 @@ struct PanelView: View {
     @ViewBuilder private var repoLine: some View {
         if let t = model.target, let repo = t.repoName {
             HStack(spacing: 5) {
-                Image(systemName: "arrow.triangle.branch").font(.system(size: 10.5))
-                Text(t.branch ?? "").font(.system(size: 11.5, weight: .medium))
-                Text("·").foregroundStyle(.tertiary)
+                if t.isGit ?? false {
+                    Image(systemName: "arrow.triangle.branch").font(.system(size: 10.5))
+                    Text(t.branch ?? "").font(.system(size: 11.5, weight: .medium))
+                    Text("·").foregroundStyle(.tertiary)
+                }
                 Text(repo).font(.system(size: 11.5))
                 if let agent = t.agent {
                     Spacer()
@@ -1090,6 +1092,9 @@ struct PanelView: View {
     @ViewBuilder private var changes: some View {
         if model.target?.repo == nil {
             noRepoState
+        } else if model.target?.isGit != true {
+            EmptyState(symbol: "arrow.triangle.branch", title: "Not a git repository",
+                       message: "Changes, branch and comments need git. The Files tab still lists this folder.")
         } else {
             branchLine
                 .padding(.leading, 12)
@@ -1275,8 +1280,8 @@ struct PanelView: View {
         } else if let err = model.state?.error {
             EmptyState(symbol: "rectangle.dashed", title: "Nothing to follow", message: err)
         } else {
-            EmptyState(symbol: "folder.badge.questionmark", title: "No repository in this tab",
-                       message: "The panel follows this tab's coding agent (Claude Code, Codex, OpenCode, Pi or Antigravity). Start one inside a git repository, or cd into one here.")
+            EmptyState(symbol: "folder.badge.questionmark", title: "No folder in this tab",
+                       message: "The panel follows this tab's coding agent (Claude Code, Codex, OpenCode, Pi or Antigravity). Start one in a folder, or cd somewhere here.")
         }
     }
 

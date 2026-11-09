@@ -30,7 +30,7 @@ func pickOuter(session, window string) error {
 		return err
 	}
 	if t.Repo == "" {
-		return fmt.Errorf("the agent pane of this window is not in a git repository")
+		return fmt.Errorf("no working folder in this window to pick files from")
 	}
 	req := map[string]any{
 		"session_id": t.SessionID,
@@ -110,26 +110,29 @@ func toolBin(name string) string {
 	return name
 }
 
-// pickInner runs fzf over the repo's files and opens the choice in the editor.
+// pickInner runs fzf over the folder's files and opens the choice in the editor.
 func pickInner(session, window, repo string) error {
 	self := selfPath()
-	files, err := listFiles(repo, false)
+	files, err := listRepoFiles(repo, false)
 	if err != nil {
 		return err
 	}
 	q := func(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
 	reloadAll := fmt.Sprintf("%s files --repo %s", q(self), q(repo))
-	reloadChanged := reloadAll + " --changed"
 	args := []string{
 		"--layout=reverse", "--info=inline-right", "--prompt=files ❯ ", "--pointer=▌", "--marker=┃",
 		"--header=enter open · ctrl-g changed on branch · ctrl-f all files · esc close",
 		"--preview", q(self) + " preview {}",
 		"--preview-window=right,55%,border-left",
 		"--color=" + fzfColors(rexBackground()),
-		"--bind", "ctrl-g:reload(" + reloadChanged + ")+change-prompt(changed ❯ )",
-		"--bind", "ctrl-f:reload(" + reloadAll + ")+change-prompt(files ❯ )",
 		"--scheme=path",
 	}
+	// "changed on branch" needs git; a plain folder has nothing to diff against.
+	if _, err := repoRoot(repo); err == nil {
+		reloadChanged := reloadAll + " --changed"
+		args = append(args, "--bind", "ctrl-g:reload("+reloadChanged+")+change-prompt(changed ❯ )")
+	}
+	args = append(args, "--bind", "ctrl-f:reload("+reloadAll+")+change-prompt(files ❯ )")
 	cmd := exec.Command(fzfBin(), args...)
 	cmd.Dir = repo
 	cmd.Stdin = strings.NewReader(strings.Join(files, "\n") + "\n")

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -362,6 +363,63 @@ func listFiles(repo string, changedOnly bool) ([]string, error) {
 		files = append(files, f)
 	}
 	return files, nil
+}
+
+// plainIgnoreDirs lists directories skipped when a folder has no git metadata
+// to read ignore rules from. Without it, one node_modules or build output
+// would drown the tree.
+var plainIgnoreDirs = map[string]bool{
+	".git": true, ".svn": true, ".hg": true,
+	"node_modules": true, "bower_components": true, "vendor": true,
+	"__pycache__": true, ".tox": true, ".mypy_cache": true, ".pytest_cache": true,
+	"dist": true, "build": true, "out": true, "target": true,
+	".next": true, ".nuxt": true, ".cache": true, ".gradle": true, ".build": true,
+	"Pods": true, "DerivedData": true,
+}
+
+// listPlainFiles walks a folder that isn't a git repository and returns every
+// file, relative to dir. Hidden directories (and so the ignore list above) are
+// pruned; hidden files such as .env stay, like the loose ignored files of a
+// git repository. Symlinks are listed but never followed.
+func listPlainFiles(dir string) ([]string, error) {
+	var files []string
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // unreadable or vanished: skip, don't abort the walk
+		}
+		rel, rerr := filepath.Rel(dir, path)
+		if rerr != nil {
+			return nil
+		}
+		if rel == "." {
+			return nil
+		}
+		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") || plainIgnoreDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		files = append(files, rel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+// listRepoFiles lists the files the Files tab shows: git-tracked, untracked
+// and loose ignored files for a repository, or a plain walk of the folder
+// when it isn't a git repository.
+func listRepoFiles(dir string, changedOnly bool) ([]string, error) {
+	if _, err := repoRoot(dir); err == nil {
+		return listFiles(dir, changedOnly)
+	}
+	if changedOnly {
+		return []string{}, nil // no git, no branch to diff against
+	}
+	return listPlainFiles(dir)
 }
 
 // Turn is one agent turn: the working tree when the prompt was submitted and

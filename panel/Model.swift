@@ -17,6 +17,7 @@ struct TargetDTO: Decodable, Equatable {
     var cwd: String?
     var repo: String?
     var repoName: String?
+    var isGit: Bool?               // false when repo is a plain folder, not a git repository
     var branch: String?
     var gitDir: String?
     var host: String?               // the Rex host the session lives on; nil here
