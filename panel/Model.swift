@@ -11,7 +11,7 @@ struct TargetDTO: Decodable, Equatable {
     var windowId: String?
     var focusedBlockId: String?
     var agentBlockId: String?
-    var agent: String?              // Claude, Codex, OpenCode or Pi
+    var agent: String?              // Claude, Codex, OpenCode, Pi or Antigravity
     var agents: [AgentPaneDTO]?     // every agent pane of the window
     var editorBlockId: String?
     var cwd: String?

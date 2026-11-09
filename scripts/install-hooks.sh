@@ -8,9 +8,12 @@
 #                ~/.config/opencode/plugins/rexmod-tui/   TUI plugin, listed in cli.json/tui.json: tells
 #                                                   rexmod which Rex pane shows a session
 #   Pi           ~/.pi/agent/extensions/rexmod.ts       extension (before_agent_start, agent_settled)
+#   Antigravity  ~/.gemini/config/plugins/rexmod/      plugin: PreInvocation + Stop command hooks,
+#                                                   and the skill
 #
 # Each agent also gets the rexmod skill (skills/rexmod): Claude Code in
-# ~/.claude/skills/rexmod, the others in ~/.agents/skills/rexmod.
+# ~/.claude/skills/rexmod, Antigravity in its plugin, the others in
+# ~/.agents/skills/rexmod.
 #
 # On each message you send, `rexmod hook prompt` snapshots the working tree and
 # hands the agent the review comments you left for it in the editor; when the
@@ -29,6 +32,7 @@ CLAUDE_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 OPENCODE_DIR="${OPENCODE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/opencode}"
 PI_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+AGY_DIR="$HOME/.gemini/config"
 
 has() { command -v "$1" >/dev/null 2>&1 || [ -d "$2" ]; }
 
@@ -114,6 +118,20 @@ skill() {
   echo "installed $1/rexmod"
 }
 
+# agy_plugin DIR: install (or remove) the Antigravity plugin, which rexmod
+# owns whole: its hooks and the skill.
+agy_plugin() {
+  if [ "$MODE" = remove ]; then
+    grep -qs '"name": "rexmod"' "$1/plugin.json" && rm -rf "$1" && echo "removed $1"
+    return 0
+  fi
+  mkdir -p "$1/skills/rexmod"
+  cp "$AGENTS/antigravity/plugin.json" "$1/plugin.json"
+  sed "s#__REXMOD__#$BIN#" "$AGENTS/antigravity/hooks.json" > "$1/hooks.json"
+  cp "$HERE/../skills/rexmod/SKILL.md" "$1/skills/rexmod/SKILL.md"
+  echo "installed $1"
+}
+
 # tui_list FILE KEY ENTRY: list (or unlist) a TUI plugin in an OpenCode config
 # file: tui.json "plugin" (OpenCode 1) or cli.json "plugins" (OpenCode 2).
 tui_list() {
@@ -154,8 +172,13 @@ if has opencode "$OPENCODE_DIR"; then
   [ "$MODE" = add ] && echo "    OpenCode: quit OpenCode (or run: pkill -f 'opencode serve') so it loads the plugin."
 fi
 if has pi "$PI_DIR"; then found=1; plugin "$AGENTS/pi-rexmod.ts" "$PI_DIR/extensions/rexmod.ts"; fi
+if has agy "$AGY_DIR"; then
+  found=1
+  agy_plugin "$AGY_DIR/plugins/rexmod"
+  [ "$MODE" = add ] && echo "    Antigravity: restart agy so it loads the plugin."
+fi
 if has claude "$CLAUDE_DIR"; then skill "$CLAUDE_DIR/skills"; fi
 if has codex "$CODEX_DIR" || has opencode "$OPENCODE_DIR" || has pi "$PI_DIR"; then
   skill "$HOME/.agents/skills" # read by Codex, OpenCode and Pi
 fi
-[ "$found" = 1 ] || echo "no supported agent found (Claude Code, Codex, OpenCode, Pi)"
+[ "$found" = 1 ] || echo "no supported agent found (Claude Code, Codex, OpenCode, Pi, Antigravity)"

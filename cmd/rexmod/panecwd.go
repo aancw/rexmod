@@ -126,10 +126,12 @@ func worktreeInUse(cwd, transcript string) string {
 }
 
 // isToolOutput tells a transcript line that carries a tool's result:
-// Claude Code's tool_result, Codex's function_call_output.
+// Claude Code's tool_result, Codex's function_call_output, and agy's model
+// steps other than its own response (GENERIC, VIEW_FILE, RUN_COMMAND, …).
 func isToolOutput(l string) bool {
 	return strings.Contains(l, `"tool_result"`) || strings.Contains(l, `"toolUseResult"`) ||
-		strings.Contains(l, `"function_call_output"`) || strings.Contains(l, `"custom_tool_call_output"`)
+		strings.Contains(l, `"function_call_output"`) || strings.Contains(l, `"custom_tool_call_output"`) ||
+		strings.Contains(l, `"source":"MODEL"`) && !strings.Contains(l, `"type":"PLANNER_RESPONSE"`)
 }
 
 func readTail(path string, n int64) string {

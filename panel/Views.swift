@@ -1276,7 +1276,7 @@ struct PanelView: View {
             EmptyState(symbol: "rectangle.dashed", title: "Nothing to follow", message: err)
         } else {
             EmptyState(symbol: "folder.badge.questionmark", title: "No repository in this tab",
-                       message: "The panel follows this tab's coding agent (Claude Code, Codex, OpenCode or Pi). Start one inside a git repository, or cd into one here.")
+                       message: "The panel follows this tab's coding agent (Claude Code, Codex, OpenCode, Pi or Antigravity). Start one inside a git repository, or cd into one here.")
         }
     }
 

@@ -20,7 +20,7 @@ https://github.com/user-attachments/assets/ac2e4950-17d7-4bd9-b16a-9bd8cb463f49
 Rex already runs your agents. rexmod builds the harness around them: it records every turn, so you
 see exactly what the agent changed; it opens a real editor beside the agent to read and review that
 code; and it hands your review back to the agent as its next input. Prompt, change, review, feedback:
-the whole loop stays in one Rex window, for Claude Code, Codex, OpenCode or Pi.
+the whole loop stays in one Rex window, for Claude Code, Codex, OpenCode, Pi or Antigravity CLI.
 
 > [!NOTE]
 > rexmod is an unofficial mod, not made by or affiliated with Superlogical. It patches your local copy
@@ -61,6 +61,7 @@ Around the loop:
 | Codex | the same hooks (trust them once with `/hooks`) | ✓ | ✓ |
 | OpenCode | server plugin + TUI plugin | ✓ | ✓ |
 | Pi | extension | ✓ | ✓ |
+| Antigravity CLI (`agy`) | plugin with `PreInvocation` / `Stop` hooks | ✓ | ✓ |
 
 ## Install
 
@@ -103,7 +104,8 @@ are there.
 
 > [!IMPORTANT]
 > Codex runs new hooks only after you trust them: start Codex and run `/hooks` once. OpenCode loads
-> plugins when its background server starts, so quit OpenCode once after installing.
+> plugins when its background server starts, so quit OpenCode once after installing. Antigravity
+> loads plugins at startup: restart a running `agy`.
 
 ## Usage
 
@@ -133,7 +135,7 @@ flowchart LR
   subgraph Rex.app
     panel[Changes panel<br/>RexModPanel.dylib]
   end
-  agent[Agent pane<br/>Claude Code · Codex · OpenCode · Pi]
+  agent[Agent pane<br/>Claude Code · Codex · OpenCode · Pi · agy]
   editor[Editor pane<br/>Neovim + rexmod.nvim]
   cli((rexmod))
   git[(.git/rexmod<br/>turns · comments)]
@@ -185,7 +187,7 @@ just updated, reopen it once the re-patch notification arrives. The panel logs t
 <summary>Last Turn stays empty</summary>
 
 The agent's hooks aren't running. Run `~/Library/Application\ Support/rexmod/scripts/install-hooks.sh`
-again, then for Codex trust the hooks with `/hooks`, and for OpenCode quit it once.
+again, then for Codex trust the hooks with `/hooks`, and for OpenCode and Antigravity quit them once.
 </details>
 
 <details>
@@ -202,7 +204,7 @@ Codex runs its hooks in one background server for every pane, so rexmod finds th
 for the Codex that works in that folder. With two of them in the same repository it can't tell
 which one sent the message, and rather than guess it leaves the notes pending and records the turn
 without a pane. Send those notes from the panel's *Changes* tab: it pastes them straight into the
-pane the panel follows. Claude Code, OpenCode and Pi don't have this limit.
+pane the panel follows. Claude Code, OpenCode, Pi and Antigravity don't have this limit.
 </details>
 
 <details>

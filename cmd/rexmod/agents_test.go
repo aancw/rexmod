@@ -18,6 +18,7 @@ func TestAgentOf(t *testing.T) {
 		{"codex", &procInfo{Name: "codex", Invoke: "/opt/homebrew/bin/codex"}, "Codex"},
 		{"opencode", &procInfo{Name: "opencode", Argv0: "opencode"}, "OpenCode"},
 		{"pi on node", &procInfo{Name: "node", Argv0: "pi", Path: "/usr/local/bin/node"}, "Pi"},
+		{"agy", &procInfo{Name: "agy", Invoke: "/opt/homebrew/bin/agy"}, "Antigravity"},
 		{"login shell", &procInfo{Name: "fish", Argv0: "-fish"}, ""},
 		{"nvim", &procInfo{Name: "nvim"}, ""},
 		{"nil", nil, ""},

@@ -27,7 +27,7 @@ Point the editor at your checkout so Lua changes are live: in
 | `cmd/rexmod` | Go CLI: target resolution, git change sets, editor, picker, comments, hooks |
 | `panel/` | Swift dylib Rex loads: the panel and the chrome inset |
 | `nvim/` | Neovim plugin (comments, language support on demand) and the picker preview |
-| `agents/` | OpenCode plugin and Pi extension |
+| `agents/` | OpenCode plugin, Pi extension and Antigravity plugin |
 | `skills/rexmod` | The skill agents get |
 | `scripts/` | Patch, update, hooks, re-patch agent, release packaging |
 

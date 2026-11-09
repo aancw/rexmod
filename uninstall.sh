@@ -24,7 +24,7 @@ if [ -f "$HOME/Library/LaunchAgents/dev.rexmod.repatch.plist" ]; then
 fi
 
 if [ -x "$PREFIX/scripts/install-hooks.sh" ]; then
-  say "Removing the agent hooks (Claude Code, Codex, OpenCode, Pi)"
+  say "Removing the agent hooks (Claude Code, Codex, OpenCode, Pi, Antigravity)"
   "$PREFIX/scripts/install-hooks.sh" --remove
 fi
 

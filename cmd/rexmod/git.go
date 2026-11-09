@@ -373,6 +373,9 @@ type Turn struct {
 	StartedAt string `json:"started_at"`
 	End       string `json:"end,omitempty"`
 	EndedAt   string `json:"ended_at,omitempty"`
+	// Prompt keys the user message that started the turn (promptKey), for
+	// agents whose prompt hook can fire again within it (agy).
+	Prompt string `json:"prompt,omitempty"`
 }
 
 func turnsDir(repo string) (string, error) {
@@ -472,7 +475,7 @@ func turnFile(d, session string) string {
 	return filepath.Join(d, sanitize(session)+".json")
 }
 
-func turnStart(repo, session string) error {
+func turnStart(repo, session, prompt string) error {
 	tree, err := snapshotTree(repo)
 	if err != nil {
 		return err
@@ -481,7 +484,7 @@ func turnStart(repo, session string) error {
 	if err != nil {
 		return err
 	}
-	t := Turn{SessionID: session, Block: os.Getenv("REX_BLOCK"), Start: tree, StartedAt: time.Now().Format(time.RFC3339Nano)}
+	t := Turn{SessionID: session, Block: os.Getenv("REX_BLOCK"), Start: tree, StartedAt: time.Now().Format(time.RFC3339Nano), Prompt: prompt}
 	return writeJSONAtomic(turnFile(d, session), t)
 }
 

@@ -1,5 +1,5 @@
-// rexmod glues Rex, git, Neovim and the coding agents Rex supports (Claude
-// Code, Codex, OpenCode, Pi) together: it powers the Changes panel, opens
+// rexmod glues Rex, git, Neovim and the coding agents (Claude Code, Codex,
+// OpenCode, Pi, Antigravity CLI) together: it powers the Changes panel, opens
 // files in the editor pane, runs the file picker, keeps review comments and
 // records agent turns.
 package main
@@ -33,7 +33,7 @@ const usage = `rexmod: Rex Changes panel, editor and review helpers
   rexmod comments clear [--sent]
   rexmod comments send [--session S] [--window W]      paste pending comments into the agent
   rexmod follow   --session S --window W --block B     follow (and focus) another agent pane of the window
-  rexmod hook prompt|stop [--text]                     agent turn hooks (JSON on stdin; --text: plain comments out)
+  rexmod hook prompt|stop [--text] [--agent A]         agent turn hooks (JSON on stdin; --text: plain comments out)
   rexmod warm                                          cache the login environment for the editor pane
   rexmod serve                                         on a remote Rex host: answer the Mac's rexmod over Rex
 
@@ -539,7 +539,7 @@ func sendComments(session, window, repo, file string) error {
 		return err
 	}
 	if agent == "" {
-		return fmt.Errorf("no agent pane (Claude Code, Codex, OpenCode or Pi) in this window")
+		return fmt.Errorf("no agent pane (Claude Code, Codex, OpenCode, Pi or Antigravity) in this window")
 	}
 	pending, err := takePending(r, agent, true)
 	if err != nil {
@@ -599,11 +599,13 @@ func openCodePane(session string, wait time.Duration) string {
 
 // cmdHook records agent turns and hands pending review comments to the
 // agent. Claude Code and Codex call it as a command hook (UserPromptSubmit,
-// Stop) and read hookSpecificOutput JSON; the OpenCode plugin and the Pi
-// extension pass --text and add the plain text to the user's message. It
-// never fails the turn: problems go to stderr, exit status 0.
+// Stop) and read hookSpecificOutput JSON; agy calls it from its plugin
+// (PreInvocation, Stop, --agent agy) and reads injectSteps JSON; the
+// OpenCode plugin and the Pi extension pass --text and add the plain text to
+// the user's message. It never fails the turn: problems go to stderr, exit
+// status 0.
 func cmdHook(args []string) error {
-	if len(args) == 0 {
+	if len(args) == 0 || args[0] != "prompt" && args[0] != "stop" {
 		return fmt.Errorf("hook: prompt | stop")
 	}
 	text, agent := false, ""
@@ -616,9 +618,38 @@ func cmdHook(args []string) error {
 			agent = rest[i+1]
 		}
 	}
-	var in hookInput
 	b, _ := io.ReadAll(os.Stdin)
-	_ = json.Unmarshal(b, &in)
+	notes := hookTurn(args[0], agent, b)
+	switch {
+	case agent == "agy":
+		return printJSON(agyReply(notes))
+	case notes == "":
+		return nil
+	case text:
+		fmt.Print(notes)
+		return nil
+	default:
+		return printJSON(map[string]any{
+			"hookSpecificOutput": map[string]any{
+				"hookEventName":     "UserPromptSubmit",
+				"additionalContext": notes,
+			},
+		})
+	}
+}
+
+// hookTurn does the work of one hook run: event is prompt or stop, payload
+// the hook's JSON. It returns the pending comments to hand the agent, as
+// text, or "".
+func hookTurn(event, agent string, payload []byte) string {
+	var in hookInput
+	var agy agyHook
+	if agent == "agy" {
+		_ = json.Unmarshal(payload, &agy)
+		in = agy.input()
+	} else {
+		_ = json.Unmarshal(payload, &in)
+	}
 	// Codex and OpenCode run hooks in a shared background server, not in the
 	// agent's pane: REX_BLOCK there names whichever pane started the server.
 	if agent == "" && (in.TurnID != "" || strings.Contains(in.TranscriptPath, "/.codex/")) {
@@ -632,7 +663,7 @@ func cmdHook(args []string) error {
 		pane := ""
 		if in.SessionID != "" {
 			wait := 0 * time.Millisecond
-			if args[0] == "prompt" {
+			if event == "prompt" {
 				wait = time.Second // a new session's TUI may not have recorded it yet
 			}
 			pane = openCodePane(in.SessionID, wait)
@@ -645,13 +676,18 @@ func cmdHook(args []string) error {
 		if in.Cwd == "" && pane != "" {
 			in.Cwd = paneCwd(pane)
 		}
+	case "agy":
+		// Its hooks run in the plugin's folder, not where the agent works.
+		if in.Cwd == "" {
+			in.Cwd = paneCwd(os.Getenv("REX_BLOCK"))
+		}
 	}
 	if in.Cwd == "" {
 		in.Cwd, _ = os.Getwd()
 	}
 	in.Cwd = worktreeInUse(in.Cwd, in.TranscriptPath)
-	if agent == "" {
-		// Claude Code and Pi run the hook from the agent's own process.
+	if agent == "" || agent == "agy" {
+		// Claude Code, Pi and agy run the hook from the agent's own process.
 		recordPaneCwd(os.Getenv("REX_BLOCK"), in.Cwd, hookAncestors())
 	} else if p := paneForeground(os.Getenv("REX_BLOCK")); p != nil && agentOf(p) != "" {
 		// Codex and OpenCode run it from a shared server: name the pane's agent.
@@ -659,40 +695,41 @@ func cmdHook(args []string) error {
 	}
 	repo, err := repoRoot(in.Cwd)
 	if err != nil {
-		return nil // not a git repo: nothing to record
+		return "" // not a git repo: nothing to record
 	}
-	switch args[0] {
-	case "prompt":
-		if err := turnStart(repo, in.SessionID); err != nil {
-			fmt.Fprintln(os.Stderr, "rexmod: turn start:", err)
+	prompt := ""
+	if agent == "agy" {
+		var cur *Turn
+		if d, err := turnsDir(repo); err == nil {
+			cur = readTurn(turnFile(d, in.SessionID))
 		}
-		// Only the notes meant for this agent: hooks inherit the REX_BLOCK
-		// of the pane the agent runs in. An agent outside Rex (another
-		// terminal or app) gets none of the notes left for a Rex pane.
-		block := os.Getenv("REX_BLOCK")
-		if block == "" {
-			block = outsideRex
+		if !agy.marksTurn(event, cur) {
+			return ""
 		}
-		pending, err := takePending(repo, block, false)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "rexmod: comments:", err)
-		}
-		if len(pending) > 0 && text {
-			fmt.Print(formatComments(pending))
-		} else if len(pending) > 0 {
-			return printJSON(map[string]any{
-				"hookSpecificOutput": map[string]any{
-					"hookEventName":     "UserPromptSubmit",
-					"additionalContext": formatComments(pending),
-				},
-			})
-		}
-	case "stop":
+		prompt = promptKey(agy.LastUserInput)
+	}
+	if event == "stop" {
 		if err := turnStop(repo, in.SessionID); err != nil {
 			fmt.Fprintln(os.Stderr, "rexmod: turn stop:", err)
 		}
-	default:
-		return fmt.Errorf("hook: unknown event %q", args[0])
+		return ""
 	}
-	return nil
+	if err := turnStart(repo, in.SessionID, prompt); err != nil {
+		fmt.Fprintln(os.Stderr, "rexmod: turn start:", err)
+	}
+	// Only the notes meant for this agent: hooks inherit the REX_BLOCK
+	// of the pane the agent runs in. An agent outside Rex (another
+	// terminal or app) gets none of the notes left for a Rex pane.
+	block := os.Getenv("REX_BLOCK")
+	if block == "" {
+		block = outsideRex
+	}
+	pending, err := takePending(repo, block, false)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "rexmod: comments:", err)
+	}
+	if len(pending) == 0 {
+		return ""
+	}
+	return formatComments(pending)
 }

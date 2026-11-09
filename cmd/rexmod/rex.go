@@ -135,10 +135,11 @@ func blockProc(session, block string) (*blockProcess, error) {
 	return &p, nil
 }
 
-// agentNames maps the process names of the coding agents Rex supports
-// ("rex skill status": Claude Code, Codex, OpenCode, Pi) to display names.
+// agentNames maps the process names of the coding agents rexmod hooks into
+// (Claude Code, Codex, OpenCode, Pi and Antigravity CLI) to display names.
 // Pi runs on Node and sets its title, so Rex reports it by argv0.
 var agentNames = map[string]string{
+	"agy":      "Antigravity",
 	"claude":   "Claude",
 	"codex":    "Codex",
 	"opencode": "OpenCode",
@@ -176,7 +177,7 @@ type Target struct {
 	WindowID       string `json:"window_id"`
 	FocusedBlockID string `json:"focused_block_id"`
 	AgentBlockID   string `json:"agent_block_id,omitempty"`
-	Agent          string `json:"agent,omitempty"` // Claude, Codex, OpenCode or Pi
+	Agent          string `json:"agent,omitempty"` // Claude, Codex, OpenCode, Pi or Antigravity
 	// Agents lists every agent pane of the window; the panel follows
 	// AgentBlockID, the one focused last.
 	Agents        []AgentPane `json:"agents,omitempty"`

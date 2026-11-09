@@ -1,0 +1,10 @@
+{
+  "rexmod": {
+    "PreInvocation": [
+      { "type": "command", "command": "'__REXMOD__' hook prompt --agent agy", "timeout": 15 }
+    ],
+    "Stop": [
+      { "type": "command", "command": "'__REXMOD__' hook stop --agent agy", "timeout": 15 }
+    ]
+  }
+}
